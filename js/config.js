@@ -7,11 +7,11 @@
 // データの保護はセキュリティルール(database.rules.json)で行います。
 // ============================================================
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  databaseURL: '',
-  projectId: '',
-  appId: '',
+  apiKey: 'AIzaSyBCReilo2NqkLL06f7XHGTNLa54p9QIZ70',
+  authDomain: 'tikfinity-minigame.firebaseapp.com',
+  databaseURL: 'https://tikfinity-minigame-default-rtdb.firebaseio.com',
+  projectId: 'tikfinity-minigame',
+  appId: '1:860894209998:web:fa4f55ac9a132bfd8fed9f',
 };
 
 // Cloudflare Worker の URL(例: https://tikfinity-minigame.xxxx.workers.dev)
