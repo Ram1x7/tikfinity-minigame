@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TikFinity ミニゲーム</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>TikFinity ミニゲーム</h1>
+  </header>
+  <main class="container">
+    <section class="card">
+      <h2>ページ一覧</h2>
+      <ul class="links">
+        <li><a href="admin.html?env=test">管理画面(テスト)</a><span class="hint">ギフトごとの演出・抽選候補・確率を設定</span></li>
+        <li><a href="test.html?env=test">テスト画面</a><span class="hint">疑似ギフトを送って動作を確認</span></li>
+        <li><a href="display.html?env=test">表示画面(テスト)</a><span class="hint">右上に TEST と表示されます</span></li>
+        <li><a href="admin.html?env=prod">管理画面(本番)</a></li>
+        <li><a href="display.html?env=prod">表示画面(本番)</a><span class="hint">PRISM LIVE にはこの URL を設定</span></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>はじめての方へ</h2>
+      <p>セットアップ手順はリポジトリの <code>README.md</code> を参照してください。</p>
+      <p class="hint" id="setup-status"></p>
+    </section>
+  </main>
+  <script type="module">
+    import { isConfigured } from './js/store.js';
+    document.getElementById('setup-status').textContent = isConfigured()
+      ? 'Firebase の接続情報は設定済みです。'
+      : 'まだ js/config.js に Firebase の接続情報が入っていません。';
+  </script>
+</body>
+</html>

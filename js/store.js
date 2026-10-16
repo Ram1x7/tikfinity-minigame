@@ -1,0 +1,102 @@
+// ============================================================
+// js/store.js
+// ------------------------------------------------------------
+// ブラウザ側で Firebase を直接扱うのはこのファイルだけ。
+// ブラウザは「読む」のが基本で、書き込むのは表示画面の再生位置だけ。
+// 設定の保存やテスト送信は Worker 経由(js/api.js)で行う。
+// ============================================================
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getDatabase, ref, get, set, onValue, onChildAdded, query,
+  orderByKey, startAfter, limitToLast, serverTimestamp,
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { firebaseConfig } from './config.js';
+
+let db = null;
+
+export function isConfigured() {
+  return Boolean(firebaseConfig.databaseURL && firebaseConfig.apiKey);
+}
+
+function database() {
+  if (!isConfigured()) {
+    throw new Error('js/config.js に Firebase の接続情報が入っていません');
+  }
+  if (!db) db = getDatabase(initializeApp(firebaseConfig));
+  return db;
+}
+
+const envRef = (env, path) => ref(database(), `envs/${env}/${path}`);
+
+/** Firebase は配列を {0:..} で返すことがあるので、テーブルの候補を配列に揃える */
+export function normalizeConfig(raw) {
+  const config = raw || {};
+  const tables = {};
+  for (const [id, t] of Object.entries(config.tables || {})) {
+    const items = Array.isArray(t.items) ? t.items : Object.values(t.items || {});
+    tables[id] = { ...t, items: items.filter(Boolean) };
+  }
+  return { gifts: config.gifts || {}, tables, settings: config.settings || {} };
+}
+
+export async function loadConfig(env) {
+  const snap = await get(envRef(env, 'config'));
+  return normalizeConfig(snap.val());
+}
+
+export function watchConfig(env, onChange) {
+  return onValue(envRef(env, 'config'), (snap) => onChange(normalizeConfig(snap.val())));
+}
+
+/** Firebase との接続状態 */
+export function watchConnection(onChange) {
+  return onValue(ref(database(), '.info/connected'), (snap) => onChange(snap.val() === true));
+}
+
+// ---------------- 表示画面の再生位置 ----------------
+
+export async function getCursor(env) {
+  const snap = await get(envRef(env, 'state/display/lastPlayedKey'));
+  return snap.val();
+}
+
+export async function setCursor(env, key) {
+  await set(envRef(env, 'state/display'), { lastPlayedKey: key, updatedAt: serverTimestamp() });
+}
+
+export async function latestQueueKey(env) {
+  const snap = await get(query(envRef(env, 'queue'), limitToLast(1)));
+  let key = null;
+  snap.forEach((child) => { key = child.key; });
+  return key;
+}
+
+/** cursor より新しいキュー項目を、古い順に1件ずつ通知する */
+export function watchQueueAfter(env, cursor, onItem) {
+  const q = cursor
+    ? query(envRef(env, 'queue'), orderByKey(), startAfter(cursor))
+    : query(envRef(env, 'queue'), orderByKey());
+  return onChildAdded(q, (snap) => onItem(snap.key, snap.val()));
+}
+
+// ---------------- 管理・テスト画面の確認用 ----------------
+
+export function watchRecentQueue(env, count, onChange) {
+  return onValue(query(envRef(env, 'queue'), limitToLast(count)), (snap) => {
+    const list = [];
+    snap.forEach((child) => { list.push({ key: child.key, ...child.val() }); });
+    onChange(list.reverse());
+  });
+}
+
+export function watchRecentLog(env, count, onChange) {
+  return onValue(query(envRef(env, 'log'), limitToLast(count)), (snap) => {
+    const list = [];
+    snap.forEach((child) => { list.push({ key: child.key, ...child.val() }); });
+    onChange(list.reverse());
+  });
+}
+
+export function watchDisplayState(env, onChange) {
+  return onValue(envRef(env, 'state/display'), (snap) => onChange(snap.val() || {}));
+}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ミニゲーム表示</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/display.css">
+</head>
+<body>
+  <!-- 1080×1920 (9:16) の固定キャンバス。画面サイズに合わせて縮小・拡大する。背景は透明。 -->
+  <div id="stage">
+    <div id="env-badge" hidden>TEST</div>
+    <div id="notice" hidden></div>
+
+    <section id="event" class="event" aria-live="polite">
+      <header class="event__head">
+        <div class="event__sender" id="ev-sender"></div>
+        <div class="event__gift" id="ev-gift"></div>
+        <div class="event__title" id="ev-title"></div>
+      </header>
+      <div class="event__count" id="ev-count"></div>
+      <div class="event__play" id="ev-play"></div>
+      <ol class="event__results" id="ev-results"></ol>
+    </section>
+
+    <div id="pending" hidden></div>
+  </div>
+
+  <script type="module" src="js/display.js"></script>
+</body>
+</html>

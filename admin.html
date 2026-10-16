@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>管理画面 - ミニゲーム</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="topbar__home" href="./">ミニゲーム</a>
+    <h1>管理画面</h1>
+    <nav class="env-switch" id="env-switch"></nav>
+  </header>
+
+  <main class="container">
+    <div id="env-warning" class="banner banner--prod" hidden>本番の設定を編集しています。保存するとすぐ配信に反映されます。</div>
+
+    <details class="card" id="conn-card">
+      <summary>接続設定(この端末に保存)</summary>
+      <label class="field">Worker の URL
+        <input id="conn-url" type="url" placeholder="https://tikfinity-minigame.xxxx.workers.dev" autocomplete="off">
+      </label>
+      <label class="field">管理用の合言葉(Worker の ADMIN_KEY)
+        <input id="conn-key" type="password" autocomplete="off">
+      </label>
+      <button class="btn" id="conn-save">保存</button>
+      <p class="hint" id="conn-status"></p>
+    </details>
+
+    <details class="card">
+      <summary>URL の案内</summary>
+      <p class="hint">PRISM LIVE に追加する表示画面の URL</p>
+      <div class="copy-row"><code id="url-display"></code><button class="btn btn--small" data-copy="url-display">コピー</button></div>
+      <p class="hint">TikFinity の Webhook に設定する URL(「合言葉」の部分を Worker の WEBHOOK_KEY に置き換え)</p>
+      <div class="copy-row"><code id="url-webhook"></code><button class="btn btn--small" data-copy="url-webhook">コピー</button></div>
+    </details>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>ギフト設定</h2>
+        <button class="btn btn--small" id="add-gift">＋ ギフトを追加</button>
+      </div>
+      <p class="hint">ギフト名は TikFinity から届く名前と完全に一致させてください。下の「受信ログ」で実際の名前を確認できます。</p>
+      <div id="gift-list" class="stack"></div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>抽選テーブル</h2>
+        <button class="btn btn--small" id="add-table">＋ テーブルを追加</button>
+      </div>
+      <p class="hint">「重み」が大きいほど当たりやすくなります。確率は重みから自動で計算されます。</p>
+      <div id="table-list" class="stack"></div>
+    </section>
+
+    <section class="card">
+      <h2>全体設定</h2>
+      <div class="grid2">
+        <label class="field">古い未再生イベントを飛ばす(分)
+          <input id="set-stale" type="number" min="0" max="1440" step="1">
+          <span class="hint">0 にすると飛ばさない</span>
+        </label>
+        <label class="field">重複とみなす間隔(秒)
+          <input id="set-dedupe" type="number" min="0" max="60" step="1">
+          <span class="hint">同じ人・同じギフト・同じ個数がこの秒数以内に届いたら1回分として扱う(0で無効)</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>受信ログ</h2>
+        <span class="hint" id="log-conn"></span>
+      </div>
+      <p class="hint">Worker が受け取った内容です。TikFinity が送ってくる項目名やギフト名の確認に使えます。</p>
+      <div id="log-list" class="log"></div>
+    </section>
+  </main>
+
+  <footer class="savebar">
+    <span id="dirty" class="savebar__dirty" hidden>未保存の変更があります</span>
+    <button class="btn btn--ghost" id="load-sample">サンプルを読み込む</button>
+    <button class="btn btn--ghost" id="copy-to-prod">テスト → 本番にコピー</button>
+    <button class="btn btn--primary" id="save">保存</button>
+  </footer>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

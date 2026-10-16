@@ -1,0 +1,281 @@
+// ============================================================
+// worker/src/index.js  (Cloudflare Worker)
+// ------------------------------------------------------------
+// TikFinity → (Webhook) → この Worker → Firebase → 表示画面
+//
+// 【エンドポイント】
+//   GET  /                         動作確認用
+//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信
+//   POST /admin/config?env=        設定(ギフト・抽選テーブル・全体設定)を保存
+//   POST /admin/test-gift?env=     テスト用の疑似ギフト(Webhookと同じ処理を通す)
+//   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
+//   POST /admin/copy-config?from=test&to=prod   設定のコピー
+//   (/admin/* は X-Admin-Key ヘッダーが必要)
+//
+// 【Worker の環境変数(シークレット)】
+//   FIREBASE_DB_URL   例: https://xxxx-default-rtdb.firebaseio.com
+//   SA_CLIENT_EMAIL   サービスアカウントの client_email
+//   SA_PRIVATE_KEY    サービスアカウントの private_key (PEM)
+//   WEBHOOK_KEY       TikFinity の Webhook URL に付ける合言葉
+//   ADMIN_KEY         管理画面・テスト画面で使う合言葉
+//   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
+// ============================================================
+
+import {
+  isEnv,
+  normalizeGift,
+  buildQueueItem,
+  sanitizeConfig,
+  dedupeRule,
+  isDuplicate,
+  DEFAULT_SETTINGS,
+} from '../../shared/core.js';
+import { createDb } from './firebase.js';
+
+const QUEUE_KEEP = 300;   // キューに残す件数
+const LOG_KEEP = 100;     // 受信ログに残す件数
+const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function corsHeaders(env) {
+  return {
+    'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+function reply(env, status, data) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+  });
+}
+
+/** 長さに依存しない比較(合言葉の総当たり対策) */
+function safeEqual(a, b) {
+  const x = new TextEncoder().encode(String(a || ''));
+  const y = new TextEncoder().encode(String(b || ''));
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
+  return diff === 0 && x.length > 0;
+}
+
+/** クエリ・form・JSON のどれで届いても平たいオブジェクトにまとめる */
+async function readFields(request, url) {
+  const fields = {};
+  for (const [k, v] of url.searchParams) {
+    if (k !== 'k' && k !== 'env') fields[k] = v;
+  }
+  const type = request.headers.get('Content-Type') || '';
+  try {
+    if (type.includes('application/json')) {
+      const body = await request.json();
+      if (body && typeof body === 'object') flatten(body, fields);
+    } else if (type.includes('form')) {
+      const form = await request.formData();
+      for (const [k, v] of form) fields[k] = typeof v === 'string' ? v : '';
+    } else {
+      const text = await request.text();
+      if (text.trim().startsWith('{')) flatten(JSON.parse(text), fields);
+      else for (const [k, v] of new URLSearchParams(text)) fields[k] = v;
+    }
+  } catch {
+    // 本文が読めなくてもクエリだけで処理を続ける
+  }
+  return fields;
+}
+
+/** {data:{giftName:..}} のような入れ子も、末端のキー名で拾えるようにする */
+function flatten(obj, out, depth = 0) {
+  for (const [k, v] of Object.entries(obj)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && depth < 3) flatten(v, out, depth + 1);
+    else if (out[k] === undefined) out[k] = v === null ? '' : String(v);
+  }
+}
+
+function trimFields(fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields).slice(0, 40)) {
+    const key = k.replace(/[.#$[\]/]/g, '_').slice(0, 40) || '_';
+    out[key] = String(v).slice(0, 200);
+  }
+  return out;
+}
+
+async function loadConfig(db, envName) {
+  const config = (await db.get(`envs/${envName}/config`)) || {};
+  return {
+    gifts: config.gifts || {},
+    tables: normalizeTables(config.tables || {}),
+    settings: { ...DEFAULT_SETTINGS, ...(config.settings || {}) },
+  };
+}
+
+/** Firebase は配列を {0:..,1:..} で返すことがあるので配列に戻す */
+function normalizeTables(tables) {
+  const out = {};
+  for (const [id, t] of Object.entries(tables)) {
+    const items = Array.isArray(t.items) ? t.items : Object.values(t.items || {});
+    out[id] = { ...t, items: items.filter(Boolean) };
+  }
+  return out;
+}
+
+/**
+ * 重複なら { duplicate: true }。初めてなら受信時刻を記録し、
+ * 後続の処理が失敗した時に記録を取り消すための undo を返す。
+ */
+async function checkAndMarkDuplicate(db, envName, gift, settings, nowMs) {
+  const rule = await dedupeRule(gift, Number(settings.dedupeWindowSec) || 0);
+  if (!rule) return { duplicate: false, undo: async () => {} };
+  const path = `envs/${envName}/dedupe/${rule.key}`;
+  const { value, etag } = await db.getWithEtag(path);
+  if (isDuplicate(value, nowMs, rule.windowMs)) return { duplicate: true };
+  // ほぼ同時に同じ内容が届いた場合、先に書いた方だけが成功する
+  const ok = await db.putIfMatch(path, nowMs, etag);
+  if (!ok) return { duplicate: true };
+  return {
+    duplicate: false,
+    // 元の値に戻す(初回なら削除)。TikFinity が再送した時に重複扱いされないように
+    undo: () => (value === null ? db.remove(path) : db.put(path, value)),
+  };
+}
+
+/** ギフト1件を処理してキューに積む(Webhook とテストで共通) */
+export async function processGift(db, envName, fields, source, nowMs = Date.now()) {
+  const gift = normalizeGift(fields);
+  const config = await loadConfig(db, envName);
+
+  let result;
+  const mark = await checkAndMarkDuplicate(db, envName, gift, config.settings, nowMs);
+  if (mark.duplicate) {
+    result = { status: 'duplicate' };
+  } else {
+    const built = buildQueueItem(gift, config);
+    if (built.skip) {
+      result = { status: 'skipped', reason: built.skip };
+    } else {
+      const item = { ...built.item, source, receivedAt: { '.sv': 'timestamp' } };
+      try {
+        const { name } = await db.post(`envs/${envName}/queue`, item);
+        result = { status: 'queued', key: name, rolls: built.item.rolls.map((r) => r.label) };
+      } catch (err) {
+        await mark.undo().catch(() => {});
+        throw err;
+      }
+    }
+  }
+
+  await db.post(`envs/${envName}/log`, {
+    at: { '.sv': 'timestamp' },
+    source,
+    fields: trimFields(fields),
+    result: { status: result.status, reason: result.reason || '', key: result.key || '' },
+  });
+  return result;
+}
+
+/** 古いデータを消して容量を一定に保つ */
+async function cleanup(db, envName, nowMs) {
+  const trim = async (path, keep) => {
+    const keys = Object.keys((await db.get(path, { shallow: 'true' })) || {}).sort();
+    if (keys.length <= keep) return;
+    const patch = {};
+    for (const k of keys.slice(0, keys.length - keep)) patch[k] = null;
+    await db.patch(path, patch);
+  };
+  await trim(`envs/${envName}/queue`, QUEUE_KEEP);
+  await trim(`envs/${envName}/log`, LOG_KEEP);
+
+  const old = await db.get(`envs/${envName}/dedupe`, {
+    orderBy: '"$value"',
+    endAt: String(nowMs - DEDUPE_TTL_MS),
+    limitToFirst: '200',
+  });
+  const keys = Object.keys(old || {});
+  if (keys.length > 0) {
+    const patch = {};
+    for (const k of keys) patch[k] = null;
+    await db.patch(`envs/${envName}/dedupe`, patch);
+  }
+}
+
+async function handleAdmin(request, env, db, url, ctx) {
+  if (!safeEqual(request.headers.get('X-Admin-Key'), env.ADMIN_KEY)) {
+    return reply(env, 401, { error: '管理用の合言葉が違います' });
+  }
+  const path = url.pathname;
+
+  if (path === '/admin/copy-config') {
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    if (!isEnv(from) || !isEnv(to) || from === to) return reply(env, 400, { error: 'from/to が不正です' });
+    const config = await db.get(`envs/${from}/config`);
+    await db.put(`envs/${to}/config`, config || {});
+    return reply(env, 200, { ok: true });
+  }
+
+  const envName = url.searchParams.get('env');
+  if (!isEnv(envName)) return reply(env, 400, { error: 'env は prod か test を指定してください' });
+
+  if (path === '/admin/config') {
+    const body = await request.json().catch(() => null);
+    const { config, errors } = sanitizeConfig(body);
+    await db.put(`envs/${envName}/config`, config);
+    return reply(env, 200, { ok: true, warnings: errors });
+  }
+
+  if (path === '/admin/test-gift') {
+    const body = await request.json().catch(() => ({}));
+    const result = await processGift(db, envName, body || {}, 'test');
+    ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
+    return reply(env, 200, result);
+  }
+
+  if (path === '/admin/clear') {
+    await db.patch(`envs/${envName}`, { queue: null, dedupe: null, log: null, state: null });
+    return reply(env, 200, { ok: true });
+  }
+
+  return reply(env, 404, { error: 'not found' });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders(env) });
+    }
+    if (request.method === 'GET' && url.pathname === '/') {
+      return reply(env, 200, { ok: true, service: 'tikfinity-minigame' });
+    }
+    if (request.method !== 'POST') return reply(env, 405, { error: 'POST のみ受け付けます' });
+
+    try {
+      const db = createDb(env);
+
+      if (url.pathname === '/webhook') {
+        if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
+          return reply(env, 401, { error: 'Webhook の合言葉が違います' });
+        }
+        const envName = url.searchParams.get('env') || 'prod';
+        if (!isEnv(envName)) return reply(env, 400, { error: 'env は prod か test を指定してください' });
+        const fields = await readFields(request, url);
+        const result = await processGift(db, envName, fields, 'webhook');
+        ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
+        // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
+        return reply(env, 200, result);
+      }
+
+      if (url.pathname.startsWith('/admin/')) {
+        return await handleAdmin(request, env, db, url, ctx);
+      }
+
+      return reply(env, 404, { error: 'not found' });
+    } catch (err) {
+      return reply(env, 500, { error: String(err && err.message ? err.message : err) });
+    }
+  },
+};

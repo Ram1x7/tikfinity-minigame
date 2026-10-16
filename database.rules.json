@@ -1,0 +1,38 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "envs": {
+      "$env": {
+        "config": {
+          ".read": "$env === 'prod' || $env === 'test'"
+        },
+        "queue": {
+          ".read": "$env === 'prod' || $env === 'test'"
+        },
+        "log": {
+          ".read": "$env === 'prod' || $env === 'test'"
+        },
+        "dedupe": {
+          ".indexOn": [".value"]
+        },
+        "state": {
+          ".read": "$env === 'prod' || $env === 'test'",
+          "display": {
+            ".write": "$env === 'prod' || $env === 'test'",
+            ".validate": "newData.hasChildren(['lastPlayedKey', 'updatedAt'])",
+            "lastPlayedKey": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "updatedAt": {
+              ".validate": "newData.val() === now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

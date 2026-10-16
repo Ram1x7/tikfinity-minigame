@@ -1,0 +1,11 @@
+# PC から wrangler でデプロイする場合の設定(ダッシュボードから貼り付ける場合は不要)
+#   cd worker && npx wrangler deploy
+# シークレットは次のコマンドで登録する(このファイルには書かない)
+#   npx wrangler secret put FIREBASE_DB_URL
+#   npx wrangler secret put SA_CLIENT_EMAIL
+#   npx wrangler secret put SA_PRIVATE_KEY
+#   npx wrangler secret put WEBHOOK_KEY
+#   npx wrangler secret put ADMIN_KEY
+name = "tikfinity-minigame"
+main = "src/index.js"
+compatibility_date = "2025-01-01"

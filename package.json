@@ -1,0 +1,11 @@
+{
+  "name": "tikfinity-minigame",
+  "private": true,
+  "type": "module",
+  "description": "TikFinityのギフトでガチャ・ルーレットを回す配信用ミニゲーム",
+  "scripts": {
+    "build": "node scripts/build-worker.mjs",
+    "check": "node scripts/build-worker.mjs --check",
+    "test": "node --test tests/*.test.js"
+  }
+}

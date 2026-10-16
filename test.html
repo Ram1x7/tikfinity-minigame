@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>テスト画面 - ミニゲーム</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="topbar__home" href="./">ミニゲーム</a>
+    <h1>テスト画面</h1>
+    <nav class="env-switch" id="env-switch"></nav>
+  </header>
+
+  <main class="container">
+    <div id="env-warning" class="banner banner--prod" hidden>本番に送信します。配信中の画面に表示されます。</div>
+
+    <section class="card">
+      <h2>疑似ギフトを送る</h2>
+      <p class="hint">TikFinity から届いた時と同じ処理(重複判定・抽選・再生待ちへの追加)を Worker で行います。</p>
+      <div class="grid2">
+        <label class="field">ギフト名
+          <input id="t-gift" type="text" list="gift-names" placeholder="Rose">
+          <datalist id="gift-names"></datalist>
+        </label>
+        <label class="field">送った人
+          <input id="t-name" type="text" value="テストさん">
+        </label>
+        <label class="field">個数(repeatCount)
+          <input id="t-count" type="number" min="1" value="1">
+        </label>
+        <label class="field">msgId(任意)
+          <input id="t-msgid" type="text" placeholder="空なら自動で毎回変わります">
+        </label>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn--primary" id="t-send">1件送信</button>
+        <button class="btn" id="t-burst">5人から連続で送信</button>
+        <button class="btn" id="t-dup">同じギフトを2回送信(重複テスト)</button>
+        <button class="btn" id="t-streak">コンボ途中の通知を送信</button>
+      </div>
+      <div id="t-result" class="log"></div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>再生待ちキュー(最新15件)</h2>
+        <button class="btn btn--small btn--danger" id="t-clear">キュー・ログを消去</button>
+      </div>
+      <div id="t-queue" class="log"></div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>表示画面のプレビュー</h2>
+        <label class="toggle"><input type="checkbox" id="t-preview"> 表示する</label>
+      </div>
+      <p class="hint">プレビューは開いた後に届いた分だけを再生し、表示画面の「再生位置」は動かしません。</p>
+      <div id="preview-box" class="preview" hidden></div>
+    </section>
+  </main>
+
+  <script type="module" src="js/test.js"></script>
+</body>
+</html>
