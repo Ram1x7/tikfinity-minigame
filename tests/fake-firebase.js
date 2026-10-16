@@ -3,7 +3,7 @@
 
 const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
 
-export function createFakeFirebase({ dbUrl = 'https://fake-db.example.com' } = {}) {
+export function createFakeFirebase({ dbUrl = 'https://fake-db.firebaseio.com' } = {}) {
   const root = {};
   const calls = [];
   const failures = []; // { method, pathIncludes } 1回だけ 500 を返す

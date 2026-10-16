@@ -62,9 +62,16 @@ async function newPage(viewport) {
     const url = new URL(r.request().url());
     const body = r.request().postData();
     workerCalls.push({ path: url.pathname, search: url.search, body: body ? JSON.parse(body) : null, key: r.request().headers()['x-admin-key'] });
-    const reply = url.pathname === '/admin/test-gift'
-      ? { status: 'queued', key: '-x', rolls: ['釣り'] }
-      : { ok: true, warnings: [] };
+    const replies = {
+      '/': { ok: true, service: 'tikfinity-minigame', version: 'test', secrets: { FIREBASE_DB_URL: true, SA_CLIENT_EMAIL: true, SA_PRIVATE_KEY: true, WEBHOOK_KEY: false, ADMIN_KEY: true }, allowedOrigins: [] },
+      '/admin/ping': { ok: true, firebase: 'ok' },
+      '/admin/test-gift': { status: 'queued', key: '-x', rolls: ['釣り'] },
+    };
+    if (r.request().method() === 'OPTIONS') {
+      await r.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' } });
+      return;
+    }
+    const reply = replies[url.pathname] || { ok: true, warnings: [] };
     await r.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(reply) });
   });
   return { page, errors };
@@ -128,6 +135,22 @@ try {
     });
     await page.goto(`${base}/admin.html?env=test`);
     page.on('dialog', (d) => d.accept());
+
+    // 接続テスト: シークレット未設定を指摘できる
+    await page.click('#conn-card summary');
+    await page.fill('#conn-url', 'https://worker.test');
+    await page.click('#conn-test');
+    await page.waitForSelector('#conn-checks .check');
+    const checks = await page.$$eval('#conn-checks .check', (els) => els.map((e) => e.textContent));
+    assert.ok(checks.some((c) => c.includes('未設定: WEBHOOK_KEY')), `接続テスト: ${checks}`);
+    assert.ok(checks.some((c) => c.includes('✓Worker から Firebase への接続')), `接続テスト: ${checks}`);
+    await page.screenshot({ path: join(shots, 'admin-conn-test.png') });
+    const bad = await page.evaluate(async () => {
+      const { diagnose } = await import('./js/api.js');
+      return (await diagnose('https://dash.cloudflare.com/abc', 'k')).map((r) => r.detail).join();
+    });
+    assert.match(bad, /workers\.dev/);
+    console.log('✔ 管理画面: 接続テストで原因を表示できる');
     await page.click('#load-sample');
     await page.waitForSelector('#gift-list .item');
     const probs = await page.$$eval('#table-list .item:first-child .prob', (els) => els.map((e) => e.textContent));

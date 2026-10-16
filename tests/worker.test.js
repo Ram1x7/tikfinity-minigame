@@ -3,7 +3,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import worker from '../worker/src/index.js';
-import { resetTokenCache } from '../worker/src/firebase.js';
+import { resetTokenCache, extractPrivateKey } from '../worker/src/firebase.js';
+import { allowedOrigins } from '../worker/src/index.js';
 import { createFakeFirebase } from './fake-firebase.js';
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -193,4 +194,51 @@ test('古いキューと重複記録を掃除して容量を保つ', async () =>
 test('env の指定が不正なら拒否', async () => {
   assert.equal((await webhook({ giftName: 'Rose' }, { envName: 'dev' })).status, 400);
   assert.equal((await admin('/admin/config?env=staging', CONFIG)).status, 400);
+});
+
+test('ALLOWED_ORIGIN はパスや末尾の / が付いていても受け付ける', async () => {
+  assert.deepEqual(allowedOrigins('https://ram1x7.github.io/tikfinity-minigame/'), ['https://ram1x7.github.io']);
+  assert.deepEqual(allowedOrigins(' https://a.example.com , ram1x7.github.io '), ['https://a.example.com']);
+  assert.deepEqual(allowedOrigins(''), []);
+
+  env.ALLOWED_ORIGIN = 'https://ram1x7.github.io/tikfinity-minigame/';
+  const res = await worker.fetch(new Request('https://w.example.com/admin/ping', {
+    method: 'OPTIONS', headers: { Origin: 'https://ram1x7.github.io' },
+  }), env, ctx);
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://ram1x7.github.io');
+});
+
+test('動作確認用の GET / はシークレットの有無だけを返す(値は返さない)', async () => {
+  delete env.WEBHOOK_KEY;
+  const body = await (await worker.fetch(new Request('https://w.example.com/'), env, ctx)).json();
+  assert.equal(body.service, 'tikfinity-minigame');
+  assert.equal(body.secrets.ADMIN_KEY, true);
+  assert.equal(body.secrets.WEBHOOK_KEY, false);
+  assert.ok(!JSON.stringify(body).includes('admin-secret'));
+});
+
+test('/admin/ping で Firebase への接続まで確認できる', async () => {
+  const ok = await (await admin('/admin/ping')).json();
+  assert.equal(ok.firebase, 'ok');
+  assert.equal((await admin('/admin/ping', {}, { key: 'x' })).status, 401);
+
+  env.FIREBASE_DB_URL = 'https://console.firebase.google.com/project/x';
+  const bad = await admin('/admin/ping');
+  assert.equal(bad.status, 500);
+  assert.match((await bad.json()).error, /FIREBASE_DB_URL の形式/);
+});
+
+test('SA_PRIVATE_KEY の貼り付けミスを吸収し、読めない時は分かるエラーを返す', async () => {
+  const pem = '-----BEGIN PRIVATE KEY-----\nAAA\n-----END PRIVATE KEY-----\n';
+  assert.equal(extractPrivateKey(JSON.stringify({ private_key: pem })), pem.trim());
+  assert.equal(extractPrivateKey(`"${pem.replace(/\n/g, '\\n')}"`), pem.trim());
+
+  // JSON ファイルを丸ごと貼っても動く
+  env.SA_PRIVATE_KEY = JSON.stringify({ type: 'service_account', private_key: PEM });
+  assert.equal((await (await admin('/admin/ping')).json()).firebase, 'ok');
+
+  resetTokenCache();
+  env.SA_PRIVATE_KEY = 'これは鍵ではない';
+  const bad = await (await admin('/admin/ping')).json();
+  assert.match(bad.firebase, /SA_PRIVATE_KEY/);
 });

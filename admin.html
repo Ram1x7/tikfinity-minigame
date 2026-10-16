@@ -24,8 +24,12 @@
       <label class="field">管理用の合言葉(Worker の ADMIN_KEY)
         <input id="conn-key" type="password" autocomplete="off">
       </label>
-      <button class="btn" id="conn-save">保存</button>
+      <div class="btn-row">
+        <button class="btn btn--primary" id="conn-save">保存</button>
+        <button class="btn" id="conn-test">接続テスト</button>
+      </div>
       <p class="hint" id="conn-status"></p>
+      <ul class="checks" id="conn-checks"></ul>
     </details>
 
     <details class="card">

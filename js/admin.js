@@ -6,7 +6,7 @@
 // ============================================================
 import { getEnv, envLabel, urlWithEnv, pageUrl } from './env.js';
 import { isConfigured, loadConfig, watchRecentLog, watchConnection } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig } from './api.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
 import {
@@ -90,6 +90,23 @@ function renderConnection() {
   $('conn-status').textContent = missing.length ? `未設定: ${missing.join('、')}` : '設定済み';
   if (missing.length) $('conn-card').open = true;
 }
+
+$('conn-test').addEventListener('click', async () => {
+  const btn = $('conn-test');
+  const list = $('conn-checks');
+  btn.disabled = true;
+  list.replaceChildren(h('li', { class: 'hint' }, '確認中…'));
+  try {
+    const results = await diagnose($('conn-url').value, $('conn-key').value);
+    if (!isConfigured()) results.unshift({ ok: false, label: 'js/config.js', detail: 'Firebase の接続情報が入っていません' });
+    list.replaceChildren(...results.map((r) => h('li', { class: `check check--${r.ok === true ? 'ok' : r.ok === false ? 'ng' : 'unknown'}` },
+      h('span', { class: 'check__mark' }, r.ok === true ? '✓' : r.ok === false ? '✗' : '?'),
+      h('span', { class: 'check__label' }, r.label),
+      r.detail ? h('span', { class: 'check__detail' }, r.detail) : null)));
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 $('conn-save').addEventListener('click', () => {
   saveConnection({ workerUrl: $('conn-url').value, adminKey: $('conn-key').value });

@@ -36,20 +36,48 @@ const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-function corsHeaders(env) {
+export const WORKER_VERSION = '1.1.0';
+
+const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY'];
+
+/**
+ * ALLOWED_ORIGIN をオリジン(https://ホスト名)の一覧に直す。
+ * 「https://xxx.github.io/tikfinity-minigame/」のようにパスや末尾の / が付いていても受け付ける。
+ * カンマ区切りで複数指定できる。
+ */
+export function allowedOrigins(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => { try { return new URL(s).origin; } catch { return null; } })
+    .filter(Boolean);
+}
+
+function corsHeaders(env, request) {
+  const allowed = allowedOrigins(env.ALLOWED_ORIGIN);
+  const origin = request.headers.get('Origin') || '';
+  let allow = '*';
+  if (allowed.length > 0) allow = allowed.includes(origin) ? origin : allowed[0];
   return {
-    'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
+    'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
     'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
   };
 }
 
-function reply(env, status, data) {
+function reply(cors, status, data) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors },
   });
+}
+
+/** どのシークレットが設定されているか(値そのものは返さない) */
+function secretStatus(env) {
+  return Object.fromEntries(SECRET_NAMES.map((n) => [n, Boolean(env[n] && String(env[n]).trim())]));
 }
 
 /** 長さに依存しない比較(合言葉の総当たり対策) */
@@ -201,81 +229,98 @@ async function cleanup(db, envName, nowMs) {
   }
 }
 
-async function handleAdmin(request, env, db, url, ctx) {
+async function handleAdmin(request, env, db, url, ctx, cors) {
   if (!safeEqual(request.headers.get('X-Admin-Key'), env.ADMIN_KEY)) {
-    return reply(env, 401, { error: '管理用の合言葉が違います' });
+    return reply(cors, 401, { error: '管理用の合言葉が違います' });
   }
   const path = url.pathname;
+
+  if (path === '/admin/ping') {
+    // 接続テスト用: サービスアカウントで Firebase を読めるかまで確認する
+    try {
+      await db.get('envs/test/config', { shallow: 'true' });
+      return reply(cors, 200, { ok: true, version: WORKER_VERSION, firebase: 'ok' });
+    } catch (err) {
+      return reply(cors, 200, { ok: false, version: WORKER_VERSION, firebase: String(err.message || err) });
+    }
+  }
 
   if (path === '/admin/copy-config') {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
-    if (!isEnv(from) || !isEnv(to) || from === to) return reply(env, 400, { error: 'from/to が不正です' });
+    if (!isEnv(from) || !isEnv(to) || from === to) return reply(cors, 400, { error: 'from/to が不正です' });
     const config = await db.get(`envs/${from}/config`);
     await db.put(`envs/${to}/config`, config || {});
-    return reply(env, 200, { ok: true });
+    return reply(cors, 200, { ok: true });
   }
 
   const envName = url.searchParams.get('env');
-  if (!isEnv(envName)) return reply(env, 400, { error: 'env は prod か test を指定してください' });
+  if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
 
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
     const { config, errors } = sanitizeConfig(body);
     await db.put(`envs/${envName}/config`, config);
-    return reply(env, 200, { ok: true, warnings: errors });
+    return reply(cors, 200, { ok: true, warnings: errors });
   }
 
   if (path === '/admin/test-gift') {
     const body = await request.json().catch(() => ({}));
     const result = await processGift(db, envName, body || {}, 'test');
     ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
-    return reply(env, 200, result);
+    return reply(cors, 200, result);
   }
 
   if (path === '/admin/clear') {
     await db.patch(`envs/${envName}`, { queue: null, dedupe: null, log: null, state: null });
-    return reply(env, 200, { ok: true });
+    return reply(cors, 200, { ok: true });
   }
 
-  return reply(env, 404, { error: 'not found' });
+  return reply(cors, 404, { error: 'not found' });
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const cors = corsHeaders(env, request);
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(env) });
+      return new Response(null, { status: 204, headers: cors });
     }
     if (request.method === 'GET' && url.pathname === '/') {
-      return reply(env, 200, { ok: true, service: 'tikfinity-minigame' });
+      return reply(cors, 200, {
+        ok: true,
+        service: 'tikfinity-minigame',
+        version: WORKER_VERSION,
+        secrets: secretStatus(env),
+        allowedOrigins: allowedOrigins(env.ALLOWED_ORIGIN),
+      });
     }
-    if (request.method !== 'POST') return reply(env, 405, { error: 'POST のみ受け付けます' });
+    if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
 
     try {
       const db = createDb(env);
 
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
-          return reply(env, 401, { error: 'Webhook の合言葉が違います' });
+          return reply(cors, 401, { error: 'Webhook の合言葉が違います' });
         }
         const envName = url.searchParams.get('env') || 'prod';
-        if (!isEnv(envName)) return reply(env, 400, { error: 'env は prod か test を指定してください' });
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
-        return reply(env, 200, result);
+        return reply(cors, 200, result);
       }
 
       if (url.pathname.startsWith('/admin/')) {
-        return await handleAdmin(request, env, db, url, ctx);
+        return await handleAdmin(request, env, db, url, ctx, cors);
       }
 
-      return reply(env, 404, { error: 'not found' });
+      return reply(cors, 404, { error: 'not found' });
     } catch (err) {
-      return reply(env, 500, { error: String(err && err.message ? err.message : err) });
+      return reply(cors, 500, { error: String(err && err.message ? err.message : err) });
     }
   },
 };

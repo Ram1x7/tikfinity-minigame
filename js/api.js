@@ -40,7 +40,7 @@ async function call(path, body) {
       body: JSON.stringify(body ?? {}),
     });
   } catch {
-    throw new Error('Worker に接続できません。URL を確認してください');
+    throw new Error('Worker から応答を受け取れませんでした。管理画面の「接続設定」→「接続テスト」で原因を確認してください');
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `エラー (${res.status})`);
@@ -51,3 +51,101 @@ export const saveConfig = (env, config) => call(`/admin/config?env=${env}`, conf
 export const sendTestGift = (env, gift) => call(`/admin/test-gift?env=${env}`, gift);
 export const clearEnv = (env) => call(`/admin/clear?env=${env}`);
 export const copyConfig = (from, to) => call(`/admin/copy-config?from=${from}&to=${to}`);
+
+/**
+ * 接続テスト。どこで止まっているかを順番に調べ、
+ * [{ ok: true|false|null, label, detail }] の形で返す(null は「確認できず」)。
+ */
+export async function diagnose(workerUrlInput, adminKeyInput) {
+  const results = [];
+  const add = (ok, label, detail = '') => results.push({ ok, label, detail });
+  const workerUrl = String(workerUrlInput || '').trim().replace(/\/+$/, '');
+  const adminKey = String(adminKeyInput || '').trim();
+
+  // 1. URL の形
+  let url;
+  try { url = new URL(workerUrl); } catch { /* 下で判定 */ }
+  if (!url || url.protocol !== 'https:') {
+    add(false, 'Worker の URL の形', 'https:// から始まる URL を入れてください');
+    return results;
+  }
+  if (/cloudflare\.com$/.test(url.hostname)) {
+    add(false, 'Worker の URL の形', 'Cloudflare の管理画面の URL になっています。Worker の「〜.workers.dev」の URL を入れてください');
+    return results;
+  }
+  if (url.pathname !== '/' && url.pathname !== '') {
+    add(false, 'Worker の URL の形', `URL の後ろに「${url.pathname}」が付いています。「https://〜.workers.dev」までにしてください`);
+    return results;
+  }
+  add(true, 'Worker の URL の形');
+
+  // 2. Worker が応答するか(このミニゲームのコードが動いているか)
+  let info = null;
+  try {
+    const res = await fetch(`${url.origin}/`, { method: 'GET' });
+    info = await res.json().catch(() => null);
+  } catch {
+    // 応答が読めない。そもそも届かないのか、届いているが読めないのかを調べる
+    let reachable = false;
+    try {
+      await fetch(`${url.origin}/`, { method: 'GET', mode: 'no-cors' });
+      reachable = true;
+    } catch { /* 届かない */ }
+    add(false, 'Worker の応答', reachable
+      ? 'Worker には届いていますが、応答を読めません。Worker に worker/dist/worker.js が貼り付けられて「デプロイ」されているか確認してください(Hello World のままだとこうなります)'
+      : 'Worker に接続できません。URL が正しいか確認してください');
+    return results;
+  }
+  if (!info || info.service !== 'tikfinity-minigame') {
+    add(false, 'Worker の応答', 'このミニゲームの Worker ではありません。worker/dist/worker.js を貼り付けてデプロイしてください');
+    return results;
+  }
+  add(true, 'Worker の応答', `バージョン ${info.version || '1.0.0(古い版)'}`);
+
+  // 3. シークレット
+  if (info.secrets) {
+    const missing = Object.entries(info.secrets).filter(([, v]) => !v).map(([k]) => k);
+    add(missing.length === 0, 'Worker のシークレット', missing.length ? `未設定: ${missing.join(', ')}` : 'すべて設定済み');
+  } else {
+    add(null, 'Worker のシークレット', 'Worker が古い版のため確認できません。最新の worker/dist/worker.js を貼り付けてください');
+  }
+
+  if (info.allowedOrigins && info.allowedOrigins.length > 0 && !info.allowedOrigins.includes(location.origin)) {
+    add(false, 'ALLOWED_ORIGIN', `このページ(${location.origin})が許可されていません。ALLOWED_ORIGIN を「${location.origin}」にするか、削除してください`);
+    return results;
+  }
+
+  // 4. 管理用の合言葉と Firebase
+  if (!adminKey) {
+    add(false, '管理用の合言葉', '入力されていません');
+    return results;
+  }
+  let ping;
+  try {
+    const res = await fetch(`${url.origin}/admin/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: '{}',
+    });
+    ping = { status: res.status, body: await res.json().catch(() => ({})) };
+  } catch {
+    add(false, '管理用の合言葉', 'Worker から応答を受け取れませんでした。ALLOWED_ORIGIN を設定している場合は、いったん削除して試してください');
+    return results;
+  }
+  if (ping.status === 401) {
+    add(false, '管理用の合言葉', '合言葉が Worker の ADMIN_KEY と一致しません');
+    return results;
+  }
+  if (ping.status === 404 || ping.status === 400) {
+    add(null, '管理用の合言葉・Firebase', 'Worker が古い版のため確認できません。最新の worker/dist/worker.js を貼り付けてください');
+    return results;
+  }
+  if (ping.status >= 500) {
+    add(false, 'Worker の設定', ping.body.error || `エラー (${ping.status})`);
+    return results;
+  }
+  add(true, '管理用の合言葉');
+  if (ping.body.firebase === 'ok') add(true, 'Worker から Firebase への接続');
+  else add(false, 'Worker から Firebase への接続', ping.body.firebase || ping.body.error || `エラー (${ping.status})`);
+  return results;
+}
