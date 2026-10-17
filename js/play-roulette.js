@@ -9,7 +9,7 @@
 // 針の下の候補の「番号. 名前」を盤面の外(下)に大きく出す。
 // 止まった後は盤面を小さくして上に寄せ、空いた下側に結果枠を出す(盤面を大きく隠さない)。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
-import { img, resultFrame, fitText, textBoostOf } from './theme.js';
+import { img, resultFrame, fitText, textBoostOf, themeRarityColor } from './theme.js';
 import { playRarityEffect } from './effects.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
@@ -195,7 +195,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
 
   const wrap = document.createElement('div');
   wrap.className = theme ? 'roulette roulette--image' : 'roulette';
-  wrap.style.setProperty('--rarity', rarityColor(roll.rarity, roll.color));
+  wrap.style.setProperty('--rarity', theme ? themeRarityColor(theme, roll.rarity, roll.color) : rarityColor(roll.rarity, roll.color));
   const canvas = document.createElement('canvas');
   const ticker = document.createElement('div');
   ticker.className = 'roulette__ticker';
@@ -312,7 +312,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     await sleep(t(200));
     // レア度別の演出(結果枠のまわり。終わると自動で消える)
     playRarityEffect(wrap, theme, roll.rarity, {
-      color: rarityColor(roll.rarity, roll.color), speed,
+      color: themeRarityColor(theme, roll.rarity, roll.color), speed,
       focus: { x: result.offsetLeft - result.offsetWidth / 2, y: result.offsetTop, w: result.offsetWidth, h: result.offsetHeight },
     });
   }

@@ -1,13 +1,13 @@
 // 画像テーマのガチャ演出:
 // 閉じた玉が落ちて揺れる → 光って開く → 札(cardFrame)が現れ、窓の中にレア度と結果を表示する
 // 画像は theme.json で指定されたもの(js/theme.js)を使う
-import { rarityColor, sleep } from './visual.js';
-import { img, rarityBadge, iconFor, fitText, textBoostOf } from './theme.js';
+import { sleep } from './visual.js';
+import { img, rarityBadge, iconFor, fitText, textBoostOf, themeRarityColor } from './theme.js';
 import { playRarityEffect } from './effects.js';
 
 export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
-  const color = rarityColor(roll.rarity, roll.color);
+  const color = themeRarityColor(theme, roll.rarity, roll.color);
 
   const wrap = document.createElement('div');
   wrap.className = 'img-gacha';
@@ -22,6 +22,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   // 札: 画像の枠 + 窓の位置に和紙の下地と文字を重ねる
   const card = document.createElement('div');
   card.className = 'img-card';
+  card.dataset.rarity = String(roll.rarity || 'N').toUpperCase();
   const windowEl = document.createElement('div');
   windowEl.className = 'img-card__window';
   const label = document.createElement('div');

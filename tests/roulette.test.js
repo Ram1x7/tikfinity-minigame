@@ -41,3 +41,12 @@ test('effectFor: レア度別の演出は既定値とテーマの設定を合わ
   assert.equal(sr.color, '#abcdef');
   assert.equal(effectFor(theme, 'R').gold, 4, '書いていないレア度は既定値');
 });
+
+test('themeRarityColor: テーマのレア度の色を優先し、無ければ従来の色', async () => {
+  const { themeRarityColor } = await import('../js/theme.js');
+  const { RARITY_COLORS } = await import('../js/visual.js');
+  const theme = { rarityColors: { N: '#6b7482', R: '#2f8f5b', SR: '#8b4fd0', SSR: '#d9a536' } };
+  assert.equal(themeRarityColor(theme, 'ssr', '#ff0000'), '#d9a536', 'テーマの色で結果一覧・バッジ・演出をそろえる');
+  assert.equal(themeRarityColor({ rarityColors: {} }, 'R'), RARITY_COLORS.R, 'テーマに色が無ければ従来の色');
+  assert.equal(themeRarityColor(null, 'SR', '#123456'), '#123456');
+});

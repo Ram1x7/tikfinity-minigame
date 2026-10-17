@@ -24,7 +24,7 @@ import { getEnv } from './env.js';
 import { playGacha } from './play-gacha.js';
 import { playGachaImage } from './play-gacha-image.js';
 import { playRoulette } from './play-roulette.js';
-import { loadTheme, fitText } from './theme.js';
+import { loadTheme, fitText, themeRarityColor } from './theme.js';
 import { parseLayout, fitPanel, textBoost } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
 
@@ -205,7 +205,9 @@ function renderCount() {
 function addChip(roll) {
   const li = document.createElement('li');
   li.className = 'chip';
-  li.style.setProperty('--rarity', rarityColor(roll.rarity, roll.color));
+  // 画像テーマはテーマのレア度の色(バッジ・札・演出と同じ色)
+  li.style.setProperty('--rarity', theme ? themeRarityColor(theme, roll.rarity, roll.color) : rarityColor(roll.rarity, roll.color));
+  if (theme) li.dataset.rarity = String(roll.rarity || 'N').toUpperCase();
   const r = document.createElement('span');
   r.className = 'chip__rarity';
   r.textContent = roll.rarity || 'N';

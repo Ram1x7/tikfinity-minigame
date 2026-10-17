@@ -127,6 +127,9 @@ export async function loadTheme(name) {
     geometry: manifest.geometry || {},
     roulette: manifest.roulette || {},
     effects: manifest.effects || {}, // 当選時のレア度別の演出(js/effects.js)
+    rarityColors: manifest.rarityColors || {}, // レア度の色(結果一覧・バッジ・札の飾り・演出の光でそろえる)
+    // "text" ならレア度のバッジを画像ではなく HTML(レア度の色)で描く
+    badgeStyle: manifest.badgeStyle === 'text' ? 'text' : 'image',
   };
 
   const styles = [manifest.css ? url(manifest.css) : null, ...(manifest.fonts || [])].filter(Boolean);
@@ -231,16 +234,27 @@ export function iconFor(theme, label) {
   return hit ? hit.src : null;
 }
 
-/** レア度の札。画像があれば画像、無ければ文字の札にする */
+/**
+ * テーマでのレア度の色。theme.json の rarityColors があればそれを使い、
+ * 結果一覧・バッジ・札の飾り・演出の光で同じ色にそろえる(無ければ従来の色)。
+ */
+export function themeRarityColor(theme, rarity, custom) {
+  const key = String(rarity || 'N').toUpperCase();
+  return (theme && theme.rarityColors && theme.rarityColors[key]) || rarityColor(key, custom);
+}
+
+/** レア度の札。画像があれば画像、無ければ(または badgeStyle が text なら)文字の札にする */
 export function rarityBadge(theme, rarity, className) {
   const key = String(rarity || 'N').toUpperCase();
-  if (theme.rarity[key]) {
+  if (theme.rarity[key] && theme.badgeStyle !== 'text') {
     const el = img(theme.rarity[key], className);
     el.alt = key;
     return el;
   }
   const el = document.createElement('div');
   el.className = `${className} ${className}--text`;
+  el.dataset.rarity = key;
+  el.style.setProperty('--rarity', themeRarityColor(theme, key));
   el.textContent = key;
   return el;
 }
@@ -282,7 +296,8 @@ export function fitText(el, maxPx, minPx, { oneLine = false } = {}) {
 export function resultFrame(theme, roll) {
   const wrap = document.createElement('div');
   wrap.className = 'img-result';
-  wrap.style.setProperty('--rarity', rarityColor(roll.rarity, roll.color));
+  wrap.dataset.rarity = String(roll.rarity || 'N').toUpperCase();
+  wrap.style.setProperty('--rarity', themeRarityColor(theme, roll.rarity, roll.color));
   const text = document.createElement('div');
   text.className = 'img-result__text';
   text.textContent = roll.label;
