@@ -1,11 +1,14 @@
 // ============================================================
-// js/layout.js  表示画面の大きさ・位置の設定(ガチャ・ルーレット別)
+// js/layout.js  表示画面の大きさ・位置の設定(テーマごと・ガチャ/ルーレット別)
 // ------------------------------------------------------------
 // 設定は表示画面の URL に入れる(管理画面の「表示の調整」で作る)。
 //   theme=wafu        画像テーマ(省略時は従来デザイン)
 //   g=上端,大きさ      ガチャの台紙の上端(px)・大きさ(%)  例 g=110,100
 //   r=上端,大きさ      ルーレットの台紙の上端(px)・大きさ(%)
-//   safe=1400         この高さ(px)より下には台紙を出さない(TikTok のコメント欄を避ける)
+//   safe=1400         この高さ(px)より下には台紙を出さない(コメント欄よけ)。0 で使わない
+//   panel=0           画像テーマで、半透明の台紙を出さない
+// 省略した項目はテーマごとの初期値になる。従来デザインの初期値は以前と同じ表示
+// (上端 300px・大きさ 100%・コメント欄よけ なし)にしている。
 // 位置・大きさはすべて 1080×1920 の画面を基準にした値。
 // DOM に依存しない関数だけを置く(node --test で確認できるように)。
 // ============================================================
@@ -16,12 +19,33 @@ export const LAYOUT_LIMITS = {
   safe: [900, 1920],
 };
 
-export const DEFAULT_LAYOUT = {
-  theme: '',
-  gacha: { top: 110, scale: 100 },
-  roulette: { top: 110, scale: 100 },
-  safeBottom: 1400,
+// テーマごとの初期値('' は従来デザイン)
+const THEME_DEFAULTS = {
+  '': {
+    gacha: { top: 300, scale: 100 },
+    roulette: { top: 300, scale: 100 },
+    safeBottom: 0,
+    panel: true,
+  },
+  wafu: {
+    gacha: { top: 110, scale: 100 },
+    roulette: { top: 110, scale: 100 },
+    safeBottom: 1400,
+    panel: true,
+  },
 };
+
+const isThemeName = (v) => /^[a-z0-9-]{1,40}$/.test(String(v || ''));
+
+/** テーマの初期値(知らない画像テーマは和風と同じ初期値) */
+export function defaultLayout(theme = '') {
+  const t = isThemeName(theme) ? theme : '';
+  const base = THEME_DEFAULTS[t] || THEME_DEFAULTS.wafu;
+  return structuredClone({ theme: t, ...base });
+}
+
+// 従来の DEFAULT_LAYOUT(従来デザインの初期値)
+export const DEFAULT_LAYOUT = defaultLayout('');
 
 const clamp = (v, [min, max], fallback) => {
   if (v === null || v === undefined || String(v).trim() === '') return fallback;
@@ -38,19 +62,27 @@ function parsePair(value, fallback) {
   };
 }
 
+function parseSafe(value, fallback) {
+  if (value === null || value === undefined || String(value).trim() === '') return fallback;
+  if (String(value).trim() === '0') return 0;
+  return clamp(value, LAYOUT_LIMITS.safe, fallback);
+}
+
 /** URL のパラメーター(URLSearchParams)から設定を読む。古い top= も両方の上端として受け付ける */
 export function parseLayout(params) {
   const p = params instanceof URLSearchParams ? params : new URLSearchParams(params);
-  const legacyTop = p.has('top') ? clamp(p.get('top'), LAYOUT_LIMITS.top, DEFAULT_LAYOUT.gacha.top) : null;
-  const base = legacyTop === null
-    ? DEFAULT_LAYOUT
-    : { ...DEFAULT_LAYOUT, gacha: { ...DEFAULT_LAYOUT.gacha, top: legacyTop }, roulette: { ...DEFAULT_LAYOUT.roulette, top: legacyTop } };
-  const theme = p.get('theme') || '';
+  const base = defaultLayout(p.get('theme') || '');
+  if (p.has('top')) {
+    const top = clamp(p.get('top'), LAYOUT_LIMITS.top, base.gacha.top);
+    base.gacha.top = top;
+    base.roulette.top = top;
+  }
   return {
-    theme: /^[a-z0-9-]{1,40}$/.test(theme) ? theme : '',
+    theme: base.theme,
     gacha: parsePair(p.get('g'), base.gacha),
     roulette: parsePair(p.get('r'), base.roulette),
-    safeBottom: clamp(p.get('safe'), LAYOUT_LIMITS.safe, DEFAULT_LAYOUT.safeBottom),
+    safeBottom: parseSafe(p.get('safe'), base.safeBottom),
+    panel: p.has('panel') ? p.get('panel') !== '0' : base.panel,
   };
 }
 
@@ -60,20 +92,22 @@ export function layoutToParams(layout) {
   if (layout.theme) out.theme = layout.theme;
   out.g = `${layout.gacha.top},${layout.gacha.scale}`;
   out.r = `${layout.roulette.top},${layout.roulette.scale}`;
-  out.safe = String(layout.safeBottom);
+  out.safe = String(layout.safeBottom || 0);
+  if (layout.theme && layout.panel === false) out.panel = '0';
   return out;
 }
 
 /**
  * 台紙の倍率を決める。設定の大きさ(%)を基本に、台紙の下端が safeBottom を
- * 越える場合は越えない大きさまで自動で縮める。
- * naturalHeight は倍率1のときの台紙の高さ(結果2件分の場所も含めた最大の高さ)。
+ * 越える場合は越えない大きさまで自動で縮める(safeBottom が 0 なら縮めない)。
+ * naturalHeight は倍率1のときの台紙の高さ(結果の欄の最大の高さも含める)。
  */
 export function fitPanel(mode, naturalHeight, safeBottom) {
   const want = mode.scale / 100;
-  const room = safeBottom - mode.top;
-  if (naturalHeight <= 0) return { zoom: want, shrunk: false, bottom: mode.top };
-  const limit = room / naturalHeight;
+  if (!safeBottom || naturalHeight <= 0) {
+    return { zoom: want, shrunk: false, bottom: Math.round(mode.top + Math.max(0, naturalHeight) * want) };
+  }
+  const limit = (safeBottom - mode.top) / naturalHeight;
   const zoom = Math.max(0.3, Math.min(want, limit));
   return { zoom, shrunk: zoom < want - 1e-6, bottom: Math.round(mode.top + naturalHeight * zoom) };
 }

@@ -155,6 +155,54 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(従来デザイン): 初期表示は以前と同じ(上端300・100%・縮小なし・結果は横並び最大3件) ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=gacha&speed=4`);
+    await page.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 2, null, { timeout: 40000 });
+    const info = await page.evaluate(() => {
+      const ev = document.getElementById('event');
+      const r = ev.getBoundingClientRect();
+      return { top: Math.round(r.top), width: Math.round(r.width), zoom: ev.style.zoom, minH: document.getElementById('ev-results').style.minHeight,
+        dir: getComputedStyle(document.getElementById('ev-results')).flexDirection };
+    });
+    assert.equal(info.top, 300, `上端 ${info.top}`);
+    assert.equal(info.width, 1000, `幅 ${info.width}`);
+    assert.ok(info.zoom === '1' || info.zoom === '', `倍率 ${info.zoom}`);
+    assert.equal(info.minH, '', '結果欄の高さを確保しない(以前と同じ)');
+    assert.equal(info.dir, 'row', '結果は横並び(以前と同じ)');
+    assert.deepEqual(errors, []);
+    // 次の項目に移ったら前の結果は消える
+    await page.goto(`${base}/display.html?demo=1&speed=4`);
+    const leftover = await page.waitForFunction(() => {
+      if (!document.getElementById('ev-sender').textContent.includes('ためしユーザー')) return false;
+      return { n: document.querySelectorAll('.event__results .chip').length };
+    }, null, { timeout: 60000, polling: 'raf' }).then((h) => h.jsonValue());
+    assert.equal(leftover.n, 0, '前の項目の結果が残っていない');
+    console.log('✔ 表示画面(従来): 初期表示が以前と同じ・前の結果が残らない');
+    await page.close();
+  }
+
+  // ---------- 表示画面(和風・台紙なし) ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=gacha&theme=wafu&panel=0&speed=4`);
+    await page.waitForFunction(() => document.body.classList.contains('theme-wafu'), null, { timeout: 20000 });
+    const bg = await page.evaluate(() => {
+      const cs = getComputedStyle(document.getElementById('event'));
+      return { image: cs.backgroundImage, color: cs.backgroundColor, border: cs.borderTopWidth };
+    });
+    assert.equal(bg.image, 'none');
+    assert.equal(bg.color, 'rgba(0, 0, 0, 0)');
+    assert.equal(bg.border, '0px');
+    console.log('✔ 表示画面(和風): 台紙なしの設定');
+    await page.close();
+  }
+
   // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------
   {
     const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
@@ -245,6 +293,14 @@ try {
     assert.ok(urls[0].includes('env=prod') && urls[0].includes('theme=wafu') && urls[0].includes('g=300%2C100'), `URL: ${urls[0]}`);
     await page.waitForFunction(() => document.querySelector('#layout-editor iframe')?.src.includes('demo=gacha'), null, { timeout: 5000 });
     assert.ok((await page.textContent('#url-display')).includes('theme=wafu'), 'URL の案内にも反映');
+    // 従来デザインに戻すと、従来の初期値のまま(和風で動かした値の影響を受けない)
+    await page.selectOption('#layout-editor select', '');
+    const classic = await page.$$eval('#layout-editor code', (els) => els[0].textContent);
+    assert.ok(classic.includes('g=300%2C100') && classic.includes('safe=0') && !classic.includes('theme='), `従来: ${classic}`);
+    // 和風に戻すと、和風で変えた値が残っている
+    await page.selectOption('#layout-editor select', 'wafu');
+    const wafuAgain = await page.$$eval('#layout-editor code', (els) => els[0].textContent);
+    assert.ok(wafuAgain.includes('g=300%2C100') && wafuAgain.includes('theme=wafu') && wafuAgain.includes('safe=1400'), `和風: ${wafuAgain}`);
     await page.screenshot({ path: join(shots, 'admin-layout.png'), fullPage: true });
     console.log('✔ 管理画面: 表示の調整で URL を作れる');
     await page.close();

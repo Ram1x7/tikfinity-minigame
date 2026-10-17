@@ -1,16 +1,18 @@
 // ============================================================
 // js/layout-editor.js  管理画面の「表示の調整」
 // ------------------------------------------------------------
-// テーマ・ガチャ/ルーレットの位置と大きさ・コメント欄よけの線を、プレビューを見ながら決め、
-// PRISM LIVE に設定する表示画面の URL を作る。
-// 設定はこの端末のブラウザに保存する。Worker・Firebase には保存しないため、
+// テーマごとに、ガチャ/ルーレットの位置と大きさ・コメント欄よけ・台紙の有無を
+// プレビューを見ながら決め、PRISM LIVE に設定する表示画面の URL を作る。
+// 設定はテーマごとに別々に、この端末のブラウザに保存する(テーマを切り替えても
+// もう一方の設定は変わらない)。Worker・Firebase には保存しないため、
 // 変更したら PRISM の URL を貼り直す必要がある。
 // ============================================================
 import { h, copyText, toast } from './dom.js';
 import { pageUrl } from './env.js';
-import { DEFAULT_LAYOUT, LAYOUT_LIMITS, parseLayout, layoutToParams } from './layout.js';
+import { LAYOUT_LIMITS, defaultLayout, parseLayout, layoutToParams } from './layout.js';
 
-const STORE_KEY = 'tm.layout';
+const KEY_THEME = 'tm.layout.theme';
+const keyFor = (theme) => `tm.layout.${theme || 'classic'}`;
 
 // 選べるテーマ(images/themes/<value>/ がある名前)
 export const THEMES = [
@@ -18,16 +20,31 @@ export const THEMES = [
   { value: 'wafu', label: '和風(和紙・藍・金)' },
 ];
 
+function read(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function write(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* 保存できない環境 */ }
+}
+
+/** テーマの保存済み設定(無ければそのテーマの初期値) */
+export function loadThemeLayout(theme) {
+  const saved = read(keyFor(theme));
+  const params = new URLSearchParams(saved || '');
+  params.set('theme', theme || '');
+  if (!theme) params.delete('theme');
+  return parseLayout(params);
+}
+
+/** いま選ばれているテーマの設定 */
 export function loadSavedLayout() {
-  try {
-    const saved = localStorage.getItem(STORE_KEY);
-    if (saved) return parseLayout(new URLSearchParams(saved));
-  } catch { /* 保存できない環境 */ }
-  return structuredClone(DEFAULT_LAYOUT);
+  const theme = read(KEY_THEME) || '';
+  return loadThemeLayout(THEMES.some((t) => t.value === theme) ? theme : '');
 }
 
 function saveLayout(layout) {
-  try { localStorage.setItem(STORE_KEY, new URLSearchParams(layoutToParams(layout)).toString()); } catch { /* 無視 */ }
+  write(KEY_THEME, layout.theme || '');
+  write(keyFor(layout.theme), new URLSearchParams(layoutToParams(layout)).toString());
 }
 
 /** 表示画面の URL(本番・テストで env だけ違う) */
@@ -35,10 +52,10 @@ export function displayUrl(env, layout, extra = {}) {
   return pageUrl('display.html', { env, ...layoutToParams(layout), ...extra });
 }
 
-function slider(label, unit, [min, max], step, value, onInput) {
+function slider(label, unit, [min, max], step, value, onInput, { disabled = false } = {}) {
   const out = h('output', {}, `${value}${unit}`);
   const range = h('input', {
-    type: 'range', min, max, step, value,
+    type: 'range', min, max, step, value, disabled,
     oninput: (e) => { out.textContent = `${e.target.value}${unit}`; onInput(Number(e.target.value)); },
   });
   return h('label', { class: 'slider' }, h('span', { class: 'slider__label' }, label), range, out);
@@ -59,12 +76,11 @@ export function initLayoutEditor(container, env, onChange) {
   const urlProd = h('code');
   const urlTest = h('code');
 
-  function refresh({ reloadPreview = true } = {}) {
+  function refresh() {
     saveLayout(layout);
     urlProd.textContent = displayUrl('prod', layout);
     urlTest.textContent = displayUrl('test', layout);
     onChange?.(layout);
-    if (!reloadPreview) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
       for (const mode of ['gacha', 'roulette']) {
@@ -79,17 +95,35 @@ export function initLayoutEditor(container, env, onChange) {
       slider('上端の位置', 'px', LAYOUT_LIMITS.top, 10, layout[mode].top, (v) => { layout[mode].top = v; refresh(); }),
       slider('大きさ', '%', LAYOUT_LIMITS.scale, 1, layout[mode].scale, (v) => { layout[mode].scale = v; refresh(); }));
 
+    const safeOn = layout.safeBottom > 0;
+    const safeGroup = h('fieldset', { class: 'layout-group' },
+      h('legend', {}, 'コメント欄よけ'),
+      h('label', { class: 'toggle' },
+        h('input', { type: 'checkbox', checked: safeOn, onchange: (e) => {
+          layout.safeBottom = e.target.checked ? 1400 : 0;
+          build();
+          refresh();
+        } }),
+        '台紙がこの線より下に出ないよう自動で縮める'),
+      slider('線の高さ', 'px', LAYOUT_LIMITS.safe, 10, layout.safeBottom || 1400, (v) => { layout.safeBottom = v; refresh(); }, { disabled: !safeOn }));
+
+    const imageTheme = Boolean(layout.theme);
     container.replaceChildren(
-      h('p', { class: 'hint' }, '位置・大きさは 1080×1920 の画面を基準にした値です。台紙が赤い線(コメント欄よけ)を越える場合は、自動で小さくして線の上に収めます。'),
+      h('p', { class: 'hint' }, '設定はデザインごとに別々に保存されます。位置・大きさは 1080×1920 の画面を基準にした値です。'),
       h('label', { class: 'field' }, 'デザイン',
-        h('select', { onchange: (e) => { layout.theme = e.target.value; refresh(); } },
-          THEMES.map((t) => h('option', { value: t.value, selected: t.value === layout.theme }, t.label)))),
+        h('select', { onchange: (e) => {
+          saveLayout(layout);
+          layout = loadThemeLayout(e.target.value);
+          build();
+          refresh();
+        } }, THEMES.map((t) => h('option', { value: t.value, selected: t.value === layout.theme }, t.label)))),
+      imageTheme ? h('label', { class: 'toggle layout-panel-toggle' },
+        h('input', { type: 'checkbox', checked: layout.panel, onchange: (e) => { layout.panel = e.target.checked; refresh(); } }),
+        '半透明の台紙を表示する') : null,
       h('div', { class: 'layout-groups' },
         modeGroup('gacha', 'ガチャ'),
         modeGroup('roulette', 'ルーレット'),
-        h('fieldset', { class: 'layout-group' },
-          h('legend', {}, 'コメント欄よけ'),
-          slider('この高さより下に出さない', 'px', LAYOUT_LIMITS.safe, 10, layout.safeBottom, (v) => { layout.safeBottom = v; refresh(); }))),
+        safeGroup),
       h('div', { class: 'layout-previews' },
         h('figure', {}, previewFrames.gacha, h('figcaption', {}, 'ガチャ(見本)')),
         h('figure', {}, previewFrames.roulette, h('figcaption', {}, 'ルーレット(見本)'))),
@@ -98,11 +132,11 @@ export function initLayoutEditor(container, env, onChange) {
       h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, '本番'), urlProd, h('button', { class: 'btn btn--small', onclick: () => copyText(urlProd.textContent) }, 'コピー')),
       h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, 'テスト'), urlTest, h('button', { class: 'btn btn--small', onclick: () => copyText(urlTest.textContent) }, 'コピー')),
       h('button', { class: 'btn btn--small', onclick: () => {
-        layout = structuredClone(DEFAULT_LAYOUT);
+        layout = defaultLayout(layout.theme);
         build();
         refresh();
-        toast('初期値に戻しました');
-      } }, '初期値に戻す'));
+        toast('このデザインの設定を初期値に戻しました');
+      } }, 'このデザインを初期値に戻す'));
   }
 
   build();

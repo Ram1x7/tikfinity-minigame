@@ -121,18 +121,37 @@ if (env === 'test' || demo) {
 if (guide) {
   const g = document.getElementById('guide');
   g.hidden = false;
-  g.style.setProperty('--safe', `${layout.safeBottom}px`);
+  // コメント欄よけを使わない設定(safe=0)でも、コメント欄の目安(1400px より下)は表示する
+  g.style.setProperty('--safe', `${layout.safeBottom || 1400}px`);
+  g.querySelector('.guide__safe').hidden = !layout.safeBottom;
 }
 
+// 画像テーマで台紙を出さない設定(panel=0)
+if (layout.theme && !layout.panel) document.body.classList.add('no-panel');
+
 // ---------------- 台紙の大きさ・位置 ----------------
-// 結果の欄は最大件数ぶんの高さを先に確保しておき、台紙の高さが再生中に変わらないようにする。
-// その最大の高さで safe の線を越えないよう、台紙の倍率を決める。
-const maxChips = () => 2;
+// コメント欄よけ(safe)を使う場合は、結果の欄に最大件数ぶんの高さを先に確保しておき、
+// 台紙の高さが再生中に変わらないようにしたうえで、safe の線を越えない倍率を決める。
+// 結果の並べ方: 従来デザインは以前と同じ(横に並べて最大3件+「ほか N 件」)。
+//               画像テーマは1件1行で最大2件、それより前は件数だけ表示。
+const legacyChips = !layout.theme;
+const maxChips = () => (legacyChips ? 3 : 2);
 
 function applyPanelLayout(mode) {
   const m = layout[mode] || layout.gacha;
-  // 結果の欄に最大件数ぶんの見本を入れて高さを測る
+  resultsEl.replaceChildren(); // 前の結果を消す(コメント欄よけの有無に関係なく)
   resultsEl.style.minHeight = '';
+  eventEl.style.zoom = '';
+  eventEl.style.transform = '';
+  slotEl.style.top = `${m.top}px`;
+  if (!layout.safeBottom) {
+    lastFit = fitPanel(m, 0, 0);
+    if (useZoom) eventEl.style.zoom = String(lastFit.zoom);
+    else eventEl.style.setProperty('--panel-scale', String(lastFit.zoom));
+    renderDebug();
+    return;
+  }
+  // 結果の欄に最大件数ぶんの見本を入れて高さを測る
   const samples = Array.from({ length: maxChips() }, () => {
     const li = document.createElement('li');
     li.className = 'chip';
@@ -140,15 +159,12 @@ function applyPanelLayout(mode) {
     return li;
   });
   resultsEl.replaceChildren(...samples);
-  eventEl.style.zoom = '';
-  eventEl.style.transform = '';
   const reserved = resultsEl.offsetHeight;
   const natural = eventEl.offsetHeight;
   resultsEl.replaceChildren();
   resultsEl.style.minHeight = `${reserved}px`;
 
   lastFit = fitPanel(m, natural, layout.safeBottom);
-  slotEl.style.top = `${m.top}px`;
   if (useZoom) eventEl.style.zoom = String(lastFit.zoom);
   else eventEl.style.setProperty('--panel-scale', String(lastFit.zoom));
   renderDebug();
@@ -165,12 +181,11 @@ function updatePending() {
   pendingEl.textContent = `あと ${rest} 件`;
 }
 
-// 結果は1件1行で新しいものを最大2件まで並べる。それより前は件数だけ表示する
 let hiddenChips = 0;
 let countBase = '';
 
 function renderCount() {
-  countEl.textContent = hiddenChips > 0 ? `${countBase}  (前の結果 ほか${hiddenChips}件)` : countBase;
+  countEl.textContent = hiddenChips > 0 && !legacyChips ? `${countBase}  (前の結果 ほか${hiddenChips}件)` : countBase;
 }
 
 function addChip(roll) {
@@ -181,10 +196,20 @@ function addChip(roll) {
   r.className = 'chip__rarity';
   r.textContent = roll.rarity || 'N';
   li.append(r, document.createTextNode(roll.label));
-  const chips = resultsEl.querySelectorAll('.chip');
+  const chips = resultsEl.querySelectorAll('.chip:not(.chip--more)');
   if (chips.length >= maxChips()) {
     chips[0].remove();
     hiddenChips++;
+  }
+  if (legacyChips) {
+    // 従来デザイン: 先頭に「ほか N 件」の札を置く(以前と同じ)
+    resultsEl.querySelector('.chip--more')?.remove();
+    if (hiddenChips > 0) {
+      const more = document.createElement('li');
+      more.className = 'chip chip--more';
+      more.textContent = `ほか ${hiddenChips} 件`;
+      resultsEl.prepend(more);
+    }
   }
   resultsEl.append(li);
   renderCount();

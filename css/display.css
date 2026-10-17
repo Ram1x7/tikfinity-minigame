@@ -177,7 +177,14 @@ body {
   margin: 12px 0 0;
   padding: 0;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+/* 画像テーマ: 結果は1件1行 */
+.theme-image .event__results {
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 12px;
 }
@@ -190,12 +197,15 @@ body {
   font-size: 46px;
   font-weight: 900;
   line-height: 1.3;
+  max-width: 940px;
+  animation: chip-in 0.35s ease both;
+}
+.theme-image .chip {
   max-width: 100%;
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  animation: chip-in 0.35s ease both;
 }
 .chip--more { border-color: var(--ink); color: var(--ink); }
 .chip__rarity {

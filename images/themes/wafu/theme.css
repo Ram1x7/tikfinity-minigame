@@ -310,3 +310,21 @@
   height: auto;
   transform: translateY(-58%);
 }
+
+/* ---------------- 台紙なし(panel=0) ----------------
+ * 半透明の藍色の台紙を出さず、素材と文字をゲーム画面の上に直接置く。
+ * 文字は背景が何色でも読めるよう、濃い縁取りを付ける。
+ */
+.theme-wafu.no-panel .event {
+  background: none;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+.theme-wafu.no-panel .event__gift,
+.theme-wafu.no-panel .event__count {
+  text-shadow:
+    3px 3px 0 var(--indigo-deep), -3px 3px 0 var(--indigo-deep),
+    3px -3px 0 var(--indigo-deep), -3px -3px 0 var(--indigo-deep),
+    0 0 10px rgba(18, 26, 54, 0.8);
+}
