@@ -82,7 +82,12 @@
     "pointer": {
       "width": 12.6,
       "top": 0.5
-    }
+    },
+    "cardWiden": {
+      "aspect": 0.92,
+      "stretch": [[30, 44], [56, 70]]
+    },
+    "cardTextSide": 19.5
   },
   "roulette": {
     "colors": [

@@ -149,9 +149,11 @@
 }
 
 /* 札: 画像の窓(透明部分)の位置は js/theme.js が測って --card-win-* に入れる */
+/* 札の幅は画像の縦横比で決まる。theme.json の cardWiden で、飾りを歪めずに横へ広げている */
 .img-card {
+  --card-h: 740px;
   position: absolute;
-  height: 740px;
+  height: var(--card-h);
   aspect-ratio: var(--card-aspect, 2 / 3);
   opacity: 0;
 }
@@ -199,6 +201,9 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  box-sizing: border-box;
+  /* 左右の飾り(theme.json の cardTextSide)に文字が掛からないようにする */
+  padding: 0 calc(var(--card-h) * var(--card-aspect-num, 0.667) * var(--card-text-inset, 0));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -228,6 +233,8 @@
   width: var(--ring-size, 760px);
   height: var(--ring-size, 760px);
   flex: none;
+  /* 止まった後に小さくするとき、上端の中央(針)を基準にする */
+  transform-origin: 50% 0;
 }
 .img-wheel canvas {
   position: absolute;
@@ -248,6 +255,11 @@
   height: auto;
   filter: drop-shadow(0 6px 0 rgba(10, 14, 32, 0.5));
 }
+/* 候補名は盤面の外(下)に出す */
+.theme-wafu .roulette--ticker-below .roulette__ticker {
+  top: calc(var(--ring-size) + 14px);
+  bottom: auto;
+}
 .theme-wafu .roulette__ticker {
   bottom: 40px;
   background: var(--washi);
@@ -260,7 +272,7 @@
 /* 結果枠(画像)。文字の場所は theme.json の resultText(右下の扇の飾りを避けている) */
 .img-result {
   position: relative;
-  width: 760px;
+  width: 720px;
   aspect-ratio: var(--result-aspect, 940 / 440);
 }
 .roulette--image .roulette__result.img-result {

@@ -44,8 +44,8 @@ function loadStylesheet(href) {
  */
 export function measureTransparentCenter(img, alphaLimit = 40) {
   if (!img) return null;
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -66,6 +66,43 @@ export function measureTransparentCenter(img, alphaLimit = 40) {
   let t = cy; while (t > 0 && alpha(cx, t - 1) <= alphaLimit) t--;
   let b = cy; while (b < h - 1 && alpha(cx, b + 1) <= alphaLimit) b++;
   return { left: l / w, right: (r + 1) / w, top: t / h, bottom: (b + 1) / h };
+}
+
+/**
+ * 札の画像を横に広げる(theme.json の geometry.cardWiden)。
+ * 飾りの無い縦の帯(stretch: 画像の幅に対する % の範囲)だけを引き伸ばし、
+ * 角の飾り・中央の飾りは元の形のまま残す。帯が2本なら均等に広げるので中央の飾りは中央のまま。
+ * 返すのは広げた画像を描いた canvas(広げられない場合は null)。
+ */
+export function widenImage(img, aspect, stretch) {
+  if (!img || !img.naturalWidth || !Array.isArray(stretch) || stretch.length === 0) return null;
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const targetW = Math.round(h * aspect);
+  const bands = stretch
+    .map(([a, b]) => [Math.round((a / 100) * w), Math.round((b / 100) * w)])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const extra = targetW - w;
+  if (extra <= 0 || bands.length === 0) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  let sx = 0;
+  let dx = 0;
+  bands.forEach(([a, b], i) => {
+    // 帯の手前はそのまま写す
+    ctx.drawImage(img, sx, 0, a - sx, h, dx, 0, a - sx, h);
+    dx += a - sx;
+    // 帯は広げる(余りは最後の帯に足す)
+    const add = i === bands.length - 1 ? extra - Math.floor(extra / bands.length) * (bands.length - 1) : Math.floor(extra / bands.length);
+    ctx.drawImage(img, a, 0, b - a, h, dx, 0, b - a + add, h);
+    dx += b - a + add;
+    sx = b;
+  });
+  ctx.drawImage(img, sx, 0, w - sx, h, dx, 0, w - sx, h);
+  return canvas;
 }
 
 const pct = (v) => `${(v * 100).toFixed(2)}%`;
@@ -102,8 +139,19 @@ export async function loadTheme(name) {
   // 札の窓・リングの穴の位置(theme.json で "auto" なら画像から測る)
   const g = theme.geometry;
   const bleed = 0.006; // 下地を枠の内側に少し潜り込ませ、隙間が出ないようにする
+  // 札を横に広げる設定があれば、広げた画像に差し替えてから窓を測る
+  let cardImage = imgs.get(theme.images.cardFrame);
+  const sourceCardWidth = cardImage?.naturalWidth || 0;
+  const widen = g.cardWiden;
+  if (widen && cardImage) {
+    const wide = widenImage(cardImage, Number(widen.aspect), widen.stretch);
+    if (wide) {
+      cardImage = wide;
+      try { theme.images.cardFrame = wide.toDataURL('image/png'); } catch { cardImage = imgs.get(theme.images.cardFrame); }
+    }
+  }
   let win = g.cardWindow;
-  if (!win || win === 'auto') win = measureTransparentCenter(imgs.get(theme.images.cardFrame));
+  if (!win || win === 'auto') win = measureTransparentCenter(cardImage);
   else win = { left: win.left / 100, top: win.top / 100, right: 1 - win.right / 100, bottom: 1 - win.bottom / 100 };
   win = win || { left: 0.14, top: 0.23, right: 0.86, bottom: 0.84 };
   let hole = g.ringHole;
@@ -145,7 +193,15 @@ export async function loadTheme(name) {
     const im = imgs.get(src);
     return im && im.naturalHeight ? `${im.naturalWidth} / ${im.naturalHeight}` : fallback;
   };
-  css.setProperty('--card-aspect', ratio(theme.images.cardFrame, '2 / 3'));
+  const cardW = cardImage?.naturalWidth || cardImage?.width;
+  const cardH = cardImage?.naturalHeight || cardImage?.height;
+  css.setProperty('--card-aspect', cardW && cardH ? `${cardW} / ${cardH}` : '2 / 3');
+  css.setProperty('--card-aspect-num', cardW && cardH ? String(cardW / cardH) : String(2 / 3));
+  // 札の文字が左右の飾りに掛からないよう、窓の端から空ける幅(札の幅に対する割合)。
+  // cardTextSide は元の画像の幅に対する % で、画像の左右の端から測る
+  const side = Number(g.cardTextSide);
+  const inset = side > 0 && cardW && sourceCardWidth ? Math.max(0, (side / 100) * sourceCardWidth / cardW - win.left) : 0;
+  css.setProperty('--card-text-inset', String(inset));
   // タイトル帯は幅÷高さの数値(高さの計算に使う)
   const banner = imgs.get(theme.images.titleBanner);
   css.setProperty('--title-aspect', banner && banner.naturalHeight ? String(banner.naturalWidth / banner.naturalHeight) : '3.39');

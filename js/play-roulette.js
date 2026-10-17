@@ -5,11 +5,14 @@
 //   - 文字が小さくなりすぎる扇形には番号を表示する
 //   - 番号・省略(…)の扇形があるときは、針の下にある候補の名前を大きく表示する(回転中も更新)
 // ようにしている。扇形の大きさは確率どおりのまま変えない。
+// 画像テーマでは、省略(…)になる扇形も番号にそろえ、針の下の候補名は盤面の外(下)に出す。
+// 止まった後は盤面を小さくして上に寄せ、空いた下側に結果枠を出す(盤面を大きく隠さない)。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
 import { img, resultFrame, fitText, textBoostOf } from './theme.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
 const MIN_TEXT_CSS_PX = 24; // 扇形の文字がこれより小さくなる場合は番号にする(1080×1920 基準)
+const MIN_TEXT_CSS_PX_IMAGE = 30; // 画像テーマではこれより小さい扇形の文字は番号にする
 const MIN_VISIBLE_CHARS = 3; // 省略してもこれだけの文字が見えなければ番号にする
 const TWO_PI = Math.PI * 2;
 
@@ -78,7 +81,7 @@ export function sliceAt(slices, rotation) {
  * 各扇形に「文字」「番号」のどちらを描くかを決める(回転中に毎回測らないよう最初に1回だけ)。
  * cssSize は円盤の表示サイズ(1080×1920 基準の px)。
  */
-function planLabels(ctx, slices, skin, cssSize) {
+function planLabels(ctx, slices, skin, cssSize, { numberIfTruncated = false } = {}) {
   const toCss = cssSize / SIZE;
   const r = skin.radius;
   return slices.map((s) => {
@@ -90,11 +93,13 @@ function planLabels(ctx, slices, skin, cssSize) {
     const truncated = text !== s.label;
     if (truncated) text = text.slice(0, -1) + '…';
     const visible = truncated ? text.length - 1 : text.length;
-    const tooSmall = fontSize * toCss < MIN_TEXT_CSS_PX;
-    const tooShort = truncated && visible < Math.min(MIN_VISIBLE_CHARS, s.label.length);
+    // 画像テーマは小さな文字を残さず番号にそろえる(候補名は盤面の外に大きく出す)
+    const tooSmall = fontSize * toCss < (numberIfTruncated ? MIN_TEXT_CSS_PX_IMAGE : MIN_TEXT_CSS_PX);
+    const tooShort = truncated && (numberIfTruncated || visible < Math.min(MIN_VISIBLE_CHARS, s.label.length));
     if (tooSmall || tooShort) {
-      // 番号は細い扇形でも読める大きさ(1080×1920 基準で 22px 以上)にする
-      const numSize = Math.min(64, Math.max(22 / toCss, s.sweep * 260));
+      // 番号は細い扇形でも読める大きさ(1080×1920 基準で 22px 以上、画像テーマは 28px 以上)にする
+      const minNum = numberIfTruncated ? 28 : 22;
+      const numSize = Math.min(64, Math.max(minNum / toCss, s.sweep * 260));
       return { mode: 'number', text: String(s.index + 1), fontSize: numSize, drawable: s.sweep >= 0.05 };
     }
     return { mode: 'text', text, fontSize, truncated };
@@ -183,16 +188,22 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
 
   let result;
   let cssSize;
-  if (theme) {
-    const ringSize = size || 760;
-    cssSize = Math.round(ringSize * theme.ringHole.d);
-    const wheel = document.createElement('div');
-    wheel.className = 'img-wheel';
-    wheel.style.setProperty('--ring-size', `${ringSize}px`);
+  let wheel = null;
+  let ringSize = 0;
+  // 画像テーマ: リングの大きさを決め、盤面(canvas)を穴に合わせて置く
+  const placeWheel = (ring) => {
+    ringSize = ring;
+    cssSize = Math.round(ring * theme.ringHole.d);
+    wrap.style.setProperty('--ring-size', `${ring}px`);
     canvas.style.width = `${cssSize}px`;
     canvas.style.height = `${cssSize}px`;
-    canvas.style.left = `${Math.round(ringSize * theme.ringHole.cx - cssSize / 2)}px`;
-    canvas.style.top = `${Math.round(ringSize * theme.ringHole.cy - cssSize / 2)}px`;
+    canvas.style.left = `${Math.round(ring * theme.ringHole.cx - cssSize / 2)}px`;
+    canvas.style.top = `${Math.round(ring * theme.ringHole.cy - cssSize / 2)}px`;
+  };
+  if (theme) {
+    wheel = document.createElement('div');
+    wheel.className = 'img-wheel';
+    placeWheel(size || 760);
     wheel.append(canvas, img(theme.images.ring, 'img-wheel__ring'), img(theme.images.pointer, 'img-wheel__pointer'));
     result = resultFrame(theme, roll);
     result.classList.add('roulette__result');
@@ -210,10 +221,18 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
   }
   mount.replaceChildren(wrap);
 
-  const ctx = setupCanvas(canvas, cssSize);
-  const plans = planLabels(ctx, slices, skin, cssSize);
+  const labelOptions = { numberIfTruncated: Boolean(theme) };
+  let ctx = setupCanvas(canvas, cssSize);
+  let plans = planLabels(ctx, slices, skin, cssSize, labelOptions);
   // 番号・省略のある盤面では、針の下の候補名を大きく出す
   const useTicker = plans.some((p) => p.mode === 'number' || p.truncated);
+  if (theme && useTicker) {
+    // 候補名を盤面の外(下)に出すため、盤面を少し小さくして場所を空ける
+    placeWheel(Math.round((size || 760) * 0.82));
+    wrap.classList.add('roulette--ticker-below');
+    ctx = setupCanvas(canvas, cssSize);
+    plans = planLabels(ctx, slices, skin, cssSize, labelOptions);
+  }
 
   // 針は真上(-90度)。当選した扇形の内側のどこかが真上に来る角度で止める。
   const s = slices[target];
@@ -225,16 +244,22 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
   while (endRot - startRot < turns * TWO_PI) endRot += TWO_PI;
 
   let shown = -1;
+  let tickerBase = 0; // 画像テーマ: 候補名の文字の大きさ(長い候補名は1行に収まるまで小さくする)
   const updateTicker = (rot) => {
     if (!useTicker) return;
     const cur = sliceAt(slices, rot);
     if (cur.index === shown) return;
     shown = cur.index;
     ticker.textContent = plans[cur.index].mode === 'number' ? `${cur.index + 1}. ${cur.label}` : cur.label;
+    if (tickerBase) fitText(ticker, tickerBase, Math.round(tickerBase * 0.6), { oneLine: true });
   };
 
   drawWheel(ctx, slices, plans, startRot, -1, skin);
-  if (useTicker) { ticker.hidden = false; updateTicker(startRot); }
+  if (useTicker) {
+    ticker.hidden = false;
+    if (theme) tickerBase = parseFloat(getComputedStyle(ticker).fontSize);
+    updateTicker(startRot);
+  }
   await sleep(t(250));
 
   const duration = t(3600);
@@ -255,6 +280,18 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
   ticker.hidden = true;
   const text = result.querySelector('.img-result__text');
   if (text) fitText(text, Math.round(60 * textBoostOf(text)), 30);
+  if (wheel) {
+    // 盤面を小さくして上に寄せ、下に結果枠の場所を空ける(当たりの扇形と針は見えたまま)
+    const playH = wrap.clientHeight;
+    const frameH = result.offsetHeight;
+    const overlap = 70; // リングの下端(外周の飾りのあたり)にだけ結果枠が重なる
+    const k = Math.min(1, Math.max(0.45, (playH - frameH + overlap) / ringSize));
+    wheel.animate(
+      [{ transform: 'scale(1)' }, { transform: `scale(${k})` }],
+      { duration: t(420), easing: 'ease-in-out', fill: 'forwards' }
+    );
+    await sleep(t(200));
+  }
   await result.animate(
     [{ opacity: 0, transform: 'translateX(-50%) scale(.7)' }, { opacity: 1, transform: 'translateX(-50%) scale(1.06)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }],
     { duration: t(400), easing: 'ease-out', fill: 'forwards' }

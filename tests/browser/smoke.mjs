@@ -234,8 +234,23 @@ try {
     // 候補12個のルーレットでは、針の下の候補名を大きく表示する
     await page.waitForFunction(() => document.getElementById('ev-sender').textContent.includes('たくさん候補'), null, { timeout: 60000 });
     await page.waitForFunction(() => { const t = document.querySelector('.roulette__ticker'); return t && !t.hidden && t.textContent; }, null, { timeout: 20000 });
+    // 候補名は盤面の外(下)に出し、盤面に重ねない
+    const tick = await page.evaluate(() => ({
+      wheel: document.querySelector('.img-wheel').getBoundingClientRect().bottom,
+      ticker: document.querySelector('.roulette__ticker').getBoundingClientRect().top,
+    }));
+    assert.ok(tick.ticker >= tick.wheel, `候補名が盤面に重なっている: ${JSON.stringify(tick)}`);
+    // 止まった後は盤面を小さくして上に寄せ、結果枠は盤面の下側に少しだけ重ねる
+    await waitOpaque('.roulette__result');
+    await page.waitForTimeout(600);
+    const stop = await page.evaluate(() => {
+      const w = document.querySelector('.img-wheel').getBoundingClientRect();
+      const r = document.querySelector('.roulette__result').getBoundingClientRect();
+      return { overlap: (w.bottom - r.top) / w.height };
+    });
+    assert.ok(stop.overlap < 0.25, `結果枠が盤面を隠しすぎ: ${JSON.stringify(stop)}`);
     assert.deepEqual(errors, []);
-    console.log('✔ 表示画面(和風): 画像・透過・コメント欄よけ・候補が多いルーレット');
+    console.log('✔ 表示画面(和風): 画像・透過・コメント欄よけ・候補が多いルーレット(候補名は盤面の外、結果枠は盤面の下)');
     await page.close();
   }
 
