@@ -101,6 +101,10 @@ function updatePending() {
   pendingEl.textContent = `あと ${rest} 件`;
 }
 
+// 結果は新しい順に最大3件まで並べ、それより前は「ほか N 件」にまとめる(画面からはみ出さないように)
+const MAX_CHIPS = 3;
+let hiddenChips = 0;
+
 function addChip(roll) {
   const li = document.createElement('li');
   li.className = 'chip';
@@ -109,6 +113,19 @@ function addChip(roll) {
   r.className = 'chip__rarity';
   r.textContent = roll.rarity || 'N';
   li.append(r, document.createTextNode(roll.label));
+
+  const chips = [...resultsEl.querySelectorAll('.chip:not(.chip--more)')];
+  if (chips.length >= MAX_CHIPS) {
+    chips[0].remove();
+    hiddenChips++;
+  }
+  resultsEl.querySelector('.chip--more')?.remove();
+  if (hiddenChips > 0) {
+    const more = document.createElement('li');
+    more.className = 'chip chip--more';
+    more.textContent = `ほか ${hiddenChips} 件`;
+    resultsEl.prepend(more);
+  }
   resultsEl.append(li);
 }
 
@@ -121,6 +138,7 @@ async function playItem(item) {
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
   resultsEl.replaceChildren();
+  hiddenChips = 0;
   playEl.replaceChildren();
   countEl.textContent = '';
   eventEl.classList.add('show');

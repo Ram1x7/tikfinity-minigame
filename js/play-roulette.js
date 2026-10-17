@@ -3,7 +3,7 @@
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
-const CSS_SIZE = 760; // 1080×1920 基準での表示サイズ(css/display.css と合わせる)
+const CSS_SIZE = 780; // 1080×1920 基準での表示サイズ(css/display.css と合わせる)
 
 /** 画面の倍率と端末の画素密度に合わせて、ぼやけない画素数にする */
 function setupCanvas(canvas) {
@@ -43,8 +43,8 @@ function drawWheel(ctx, slices, rotation, highlight = -1) {
     ctx.closePath();
     ctx.fillStyle = s.fill;
     ctx.fill();
-    ctx.lineWidth = i === highlight ? 14 : 6;
-    ctx.strokeStyle = i === highlight ? '#3b2a2a' : '#ffffff';
+    ctx.lineWidth = i === highlight ? 16 : 7;
+    ctx.strokeStyle = '#2a1a16';
     ctx.stroke();
 
     // 細すぎる扇形には文字を書かない
@@ -53,13 +53,18 @@ function drawWheel(ctx, slices, rotation, highlight = -1) {
     ctx.rotate(s.start + s.sweep / 2);
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#3b2a2a';
-    const fontSize = Math.max(22, Math.min(46, s.sweep * 150));
+    const fontSize = Math.max(32, Math.min(64, s.sweep * 190));
     ctx.font = `900 ${fontSize}px 'Zen Maru Gothic', sans-serif`;
     let text = s.label;
-    const maxWidth = r - 110;
+    const maxWidth = r - 120;
     while (text.length > 1 && ctx.measureText(text).width > maxWidth) text = text.slice(0, -1);
     if (text !== s.label) text = text.slice(0, -1) + '…';
+    // 白い縁取り → 濃い文字 の順に描いて、色の上でも読めるようにする
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeText(text, r - 36, 0);
+    ctx.fillStyle = '#2a1a16';
     ctx.fillText(text, r - 36, 0);
     ctx.restore();
   });
@@ -67,10 +72,10 @@ function drawWheel(ctx, slices, rotation, highlight = -1) {
   // 中心
   ctx.beginPath();
   ctx.arc(0, 0, 70, 0, Math.PI * 2);
-  ctx.fillStyle = '#fffaf2';
+  ctx.fillStyle = '#fffaf0';
   ctx.fill();
   ctx.lineWidth = 8;
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = '#2a1a16';
   ctx.stroke();
   ctx.restore();
 }

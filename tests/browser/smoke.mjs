@@ -143,7 +143,7 @@ try {
       rect: document.getElementById('stage').getBoundingClientRect().toJSON(),
     }));
     assert.equal(Number(info.zoom).toFixed(3), (360 / 1080).toFixed(3), 'zoom で縮小している');
-    assert.equal(info.canvas, Math.round(760 * (360 / 1080) * 3), 'canvas は実際の画素数で描く');
+    assert.equal(info.canvas, Math.round(780 * (360 / 1080) * 3), 'canvas は実際の画素数で描く');
     assert.ok(Math.abs(info.rect.width - 360) < 1 && Math.abs(info.rect.height - 640) < 1, `画面いっぱい: ${JSON.stringify(info.rect)}`);
     await page.screenshot({ path: join(shots, 'display-demo-phone.png') });
     await page.setViewportSize({ width: 960, height: 540 });
