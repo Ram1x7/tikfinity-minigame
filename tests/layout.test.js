@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLayout, layoutToParams, fitPanel, defaultLayout, DEFAULT_LAYOUT } from '../js/layout.js';
+import { parseLayout, layoutToParams, fitPanel, textBoost, TEXT_BOOST_MAX, defaultLayout, DEFAULT_LAYOUT } from '../js/layout.js';
 
 test('従来デザインの初期値は以前の表示と同じ(上端300・100%・コメント欄よけなし)', () => {
   const l = parseLayout(new URLSearchParams(''));
@@ -15,7 +15,7 @@ test('従来デザインの初期値は以前の表示と同じ(上端300・100%
 test('テーマごとに初期値が独立している', () => {
   const wafu = parseLayout(new URLSearchParams('theme=wafu'));
   assert.deepEqual(wafu.gacha, { top: 110, scale: 100 });
-  assert.equal(wafu.safeBottom, 1400);
+  assert.equal(wafu.safeBottom, 1100, '和風のコメント欄よけは暫定 1100');
   assert.equal(wafu.panel, true);
   // 和風の初期値を変えても従来の初期値は変わらない
   const w = defaultLayout('wafu');
@@ -63,4 +63,13 @@ test('fitPanel: 下端が safe を越えるときだけ縮める', () => {
 
   const small = fitPanel({ top: 110, scale: 80 }, 1400, 1400);
   assert.equal(small.zoom, 0.8, '設定の大きさが収まるならそのまま');
+});
+
+test('textBoost: 縮めたぶんだけ結果の文字を大きくする(上限あり)、縮めなければ 1', () => {
+  const m = { top: 110, scale: 100 };
+  assert.equal(textBoost(fitPanel(m, 900, 1100), m), 1, '縮めていない');
+  assert.equal(textBoost(fitPanel(m, 0, 0), m), 1, 'コメント欄よけなし(従来デザイン)');
+  const fit = fitPanel(m, 1100, 1100); // 990/1100 = 0.9
+  assert.ok(Math.abs(textBoost(fit, m) - 1 / 0.9) < 1e-9);
+  assert.equal(textBoost(fitPanel(m, 2000, 1100), m), TEXT_BOOST_MAX, '大きく縮めても上限まで');
 });

@@ -95,17 +95,19 @@ export function initLayoutEditor(container, env, onChange) {
       slider('上端の位置', 'px', LAYOUT_LIMITS.top, 10, layout[mode].top, (v) => { layout[mode].top = v; refresh(); }),
       slider('大きさ', '%', LAYOUT_LIMITS.scale, 1, layout[mode].scale, (v) => { layout[mode].scale = v; refresh(); }));
 
+    // 線の初期値はデザインの初期値(従来デザインは初期値がオフなので 1100)
+    const safeDefault = () => defaultLayout(layout.theme).safeBottom || 1100;
     const safeOn = layout.safeBottom > 0;
     const safeGroup = h('fieldset', { class: 'layout-group' },
       h('legend', {}, 'コメント欄よけ'),
       h('label', { class: 'toggle' },
         h('input', { type: 'checkbox', checked: safeOn, onchange: (e) => {
-          layout.safeBottom = e.target.checked ? 1400 : 0;
+          layout.safeBottom = e.target.checked ? safeDefault() : 0;
           build();
           refresh();
         } }),
         '台紙がこの線より下に出ないよう自動で縮める'),
-      slider('線の高さ', 'px', LAYOUT_LIMITS.safe, 10, layout.safeBottom || 1400, (v) => { layout.safeBottom = v; refresh(); }, { disabled: !safeOn }));
+      slider('線の高さ', 'px', LAYOUT_LIMITS.safe, 10, layout.safeBottom || safeDefault(), (v) => { layout.safeBottom = v; refresh(); }, { disabled: !safeOn }));
 
     const imageTheme = Boolean(layout.theme);
     container.replaceChildren(

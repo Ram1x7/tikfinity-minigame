@@ -6,7 +6,7 @@
 //   - 番号・省略(…)の扇形があるときは、針の下にある候補の名前を大きく表示する(回転中も更新)
 // ようにしている。扇形の大きさは確率どおりのまま変えない。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
-import { img, resultFrame, fitText } from './theme.js';
+import { img, resultFrame, fitText, textBoostOf } from './theme.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
 const MIN_TEXT_CSS_PX = 24; // 扇形の文字がこれより小さくなる場合は番号にする(1080×1920 基準)
@@ -254,7 +254,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
   drawWheel(ctx, slices, plans, endRot, target, skin);
   ticker.hidden = true;
   const text = result.querySelector('.img-result__text');
-  if (text) fitText(text, 60, 30);
+  if (text) fitText(text, Math.round(60 * textBoostOf(text)), 30);
   await result.animate(
     [{ opacity: 0, transform: 'translateX(-50%) scale(.7)' }, { opacity: 1, transform: 'translateX(-50%) scale(1.06)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }],
     { duration: t(400), easing: 'ease-out', fill: 'forwards' }

@@ -2,7 +2,7 @@
 // 閉じた玉が落ちて揺れる → 光って開く → 札(cardFrame)が現れ、窓の中にレア度と結果を表示する
 // 画像は theme.json で指定されたもの(js/theme.js)を使う
 import { rarityColor, sleep } from './visual.js';
-import { img, rarityBadge, iconFor, fitText } from './theme.js';
+import { img, rarityBadge, iconFor, fitText, textBoostOf } from './theme.js';
 
 export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
@@ -66,7 +66,8 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   // 札が現れる。表示してから文字の大きさを窓に合わせる
   card.style.visibility = 'hidden';
   card.style.opacity = '1';
-  fitText(label, 62, 28);
+  // 台紙を縮めているときは、そのぶん大きめから合わせる(入りきらなければ従来どおり小さくする)
+  fitText(label, Math.round(62 * textBoostOf(label)), 28);
   card.style.visibility = '';
   card.style.opacity = '';
   await card.animate(

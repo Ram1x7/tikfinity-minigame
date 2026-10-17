@@ -239,6 +239,38 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(和風・初期値): コメント欄よけ 1100 で縮めても結果の文字が小さくなりすぎない ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=gacha&theme=wafu&speed=4`);
+    await page.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 2, null, { timeout: 40000 });
+    const m = await page.evaluate(() => {
+      const ev = document.getElementById('event');
+      const zoom = parseFloat(ev.style.zoom || '1');
+      const eff = (el) => parseFloat(getComputedStyle(el).fontSize) * zoom; // 1080×1920 の画面での見た目の大きさ
+      const chips = [...document.querySelectorAll('.event__results .chip')];
+      return {
+        zoom,
+        boost: parseFloat(ev.style.getPropertyValue('--text-boost')),
+        bottom: ev.getBoundingClientRect().bottom,
+        chipEff: Math.min(...chips.map(eff)),
+        labelEff: eff(document.querySelector('.img-card__label')),
+        overflow: [...document.querySelectorAll('.img-card__label')].filter((el) => el.scrollHeight > el.clientHeight + 1).length,
+      };
+    });
+    assert.ok(m.bottom <= 550 + 1, `台紙の下端 ${m.bottom}(初期値 1100 = 画面 0.5 倍で 550px)`);
+    assert.ok(m.zoom < 1 && m.boost > 1, `縮めたぶん結果の文字を大きくする: zoom ${m.zoom} boost ${m.boost}`);
+    assert.ok(m.chipEff >= 36, `結果の一覧の見た目の大きさ ${m.chipEff.toFixed(1)}px`);
+    assert.ok(m.labelEff >= 28 * m.zoom - 0.5, `札の文字 ${m.labelEff.toFixed(1)}px`);
+    assert.equal(m.overflow, 0, '札の文字がはみ出していない');
+    assert.deepEqual(errors, []);
+    console.log(`✔ 表示画面(和風・初期値): コメント欄よけ 1100 で ${Math.round(m.zoom * 100)}%、結果の文字 ×${m.boost.toFixed(2)}`);
+    await page.close();
+  }
+
   // ---------- 管理画面: サンプル読み込み→保存で Worker に正しい形で送る ----------
   {
     const { page, errors } = await newPage({ width: 390, height: 844 });
@@ -300,7 +332,7 @@ try {
     // 和風に戻すと、和風で変えた値が残っている
     await page.selectOption('#layout-editor select', 'wafu');
     const wafuAgain = await page.$$eval('#layout-editor code', (els) => els[0].textContent);
-    assert.ok(wafuAgain.includes('g=300%2C100') && wafuAgain.includes('theme=wafu') && wafuAgain.includes('safe=1400'), `和風: ${wafuAgain}`);
+    assert.ok(wafuAgain.includes('g=300%2C100') && wafuAgain.includes('theme=wafu') && wafuAgain.includes('safe=1100'), `和風: ${wafuAgain}`);
     await page.screenshot({ path: join(shots, 'admin-layout.png'), fullPage: true });
     console.log('✔ 管理画面: 表示の調整で URL を作れる');
     await page.close();

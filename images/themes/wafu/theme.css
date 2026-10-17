@@ -108,7 +108,8 @@
   border: 5px solid var(--gold);
   outline: 3px solid var(--indigo-deep);
   color: var(--indigo);
-  font-size: 42px;
+  /* --text-boost: コメント欄よけで台紙を縮めたとき、結果の文字だけ大きくする倍率(表示画面が入れる) */
+  font-size: calc(42px * var(--text-boost, 1));
 }
 .theme-wafu .chip__rarity { color: var(--rarity, var(--gold-deep)); }
 
@@ -167,12 +168,13 @@
   top: var(--card-win-top, 22.4%);
   bottom: var(--card-win-bottom, 15.8%);
   box-sizing: border-box;
-  padding: 18px 20px 14px;
+  /* 左右の余白は小さめにして、結果の文字に幅を回す */
+  padding: 16px 8px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   background:
     radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.7), transparent 60%),
     linear-gradient(180deg, var(--washi), var(--washi-dark));
@@ -204,7 +206,10 @@
   color: var(--indigo);
   font-weight: 900;
   line-height: 1.25;
+  /* 日本語を文節の切れ目で折り返す(対応していないブラウザは従来どおり1文字単位)。
+     文節が入らないときは fitText が文字を小さくし、最小でも入らなければ途中で折る */
   word-break: break-word;
+  word-break: auto-phrase;
   overflow: hidden;
 }
 .img-card__icon {
@@ -249,7 +254,7 @@
   border: 5px solid var(--gold);
   outline: 3px solid var(--indigo-deep);
   color: var(--indigo);
-  font-size: 54px;
+  font-size: calc(54px * var(--text-boost, 1));
 }
 
 /* 結果枠(画像)。文字の場所は theme.json の resultText(右下の扇の飾りを避けている) */
@@ -298,7 +303,10 @@
   color: var(--indigo);
   font-weight: 900;
   line-height: 1.2;
+  /* 日本語を文節の切れ目で折り返す(対応していないブラウザは従来どおり1文字単位)。
+     文節が入らないときは fitText が文字を小さくし、最小でも入らなければ途中で折る */
   word-break: break-word;
+  word-break: auto-phrase;
   overflow: hidden;
 }
 .img-result--icon .img-result__text { left: var(--result-text-left-icon, 23%); }

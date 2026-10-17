@@ -5,7 +5,7 @@
 //   theme=wafu        画像テーマ(省略時は従来デザイン)
 //   g=上端,大きさ      ガチャの台紙の上端(px)・大きさ(%)  例 g=110,100
 //   r=上端,大きさ      ルーレットの台紙の上端(px)・大きさ(%)
-//   safe=1400         この高さ(px)より下には台紙を出さない(コメント欄よけ)。0 で使わない
+//   safe=1100         この高さ(px)より下には台紙を出さない(コメント欄よけ)。0 で使わない
 //   panel=0           画像テーマで、半透明の台紙を出さない
 // 省略した項目はテーマごとの初期値になる。従来デザインの初期値は以前と同じ表示
 // (上端 300px・大きさ 100%・コメント欄よけ なし)にしている。
@@ -30,7 +30,8 @@ const THEME_DEFAULTS = {
   wafu: {
     gacha: { top: 110, scale: 100 },
     roulette: { top: 110, scale: 100 },
-    safeBottom: 1400,
+    // 実際のコメント欄(6件+入力欄)が上から約1130pxまで来るため、暫定で1100
+    safeBottom: 1100,
     panel: true,
   },
 };
@@ -110,4 +111,18 @@ export function fitPanel(mode, naturalHeight, safeBottom) {
   const limit = (safeBottom - mode.top) / naturalHeight;
   const zoom = Math.max(0.3, Math.min(want, limit));
   return { zoom, shrunk: zoom < want - 1e-6, bottom: Math.round(mode.top + naturalHeight * zoom) };
+}
+
+// 自動で縮めたときに結果の文字だけを大きくする上限(1.3 = 30% まで)
+export const TEXT_BOOST_MAX = 1.3;
+
+/**
+ * コメント欄よけで台紙を縮めたとき、結果の文字(結果の一覧・札・結果枠など)に掛ける倍率。
+ * 縮めた分を打ち消して、見た目の文字の大きさを縮める前に近づける(上限 TEXT_BOOST_MAX)。
+ * 縮めていない(zoom が設定の大きさのまま)なら 1。
+ */
+export function textBoost(fit, mode) {
+  if (!fit || !fit.shrunk) return 1;
+  const want = mode.scale / 100;
+  return Math.min(TEXT_BOOST_MAX, Math.max(1, want / fit.zoom));
 }

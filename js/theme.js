@@ -192,9 +192,19 @@ export function rarityBadge(theme, rarity, className) {
  * 文字が枠からはみ出さないよう、入りきる大きさまで文字を小さくする。
  * el は幅・高さが決まった箱の中にある前提(oneLine のときは幅だけ)。
  */
+/**
+ * 台紙をコメント欄よけで縮めたときの、結果の文字の倍率(表示画面が --text-boost に入れる)。
+ * 縮めていなければ 1。
+ */
+export function textBoostOf(el) {
+  const v = parseFloat(getComputedStyle(el).getPropertyValue('--text-boost'));
+  return Number.isFinite(v) && v > 1 ? v : 1;
+}
+
 export function fitText(el, maxPx, minPx, { oneLine = false } = {}) {
   let size = maxPx;
   el.style.fontSize = `${size}px`;
+  el.style.overflowWrap = '';
   const box = el.parentElement;
   // 1行の文字(white-space: nowrap)は幅だけを見る。行の高さで縦にはみ出し扱いされないように
   const fits = oneLine
@@ -206,6 +216,8 @@ export function fitText(el, maxPx, minPx, { oneLine = false } = {}) {
     size -= 2;
     el.style.fontSize = `${size}px`;
   }
+  // 最小の大きさでも入らない長い語は、途中で折り返して見切れないようにする
+  if (!oneLine && !fits()) el.style.overflowWrap = 'anywhere';
   return size;
 }
 

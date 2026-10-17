@@ -10,7 +10,7 @@
 //   &theme=wafu    画像テーマ(images/themes/<名前>/)。省略時は従来のデザイン
 //   &g=110,100     ガチャの台紙の上端(px)・大きさ(%)     ┐ 管理画面の「表示の調整」で作る
 //   &r=110,100     ルーレットの台紙の上端(px)・大きさ(%) │ (js/layout.js)
-//   &safe=1400     これより下に台紙を出さない(コメント欄よけ)┘
+//   &safe=1100     これより下に台紙を出さない(コメント欄よけ)┘
 //   &skip=1        起動時に溜まっている未再生分を飛ばして最新から始める
 //   &speed=2       演出の速さ(テスト用)
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
@@ -24,7 +24,7 @@ import { playGacha } from './play-gacha.js';
 import { playGachaImage } from './play-gacha-image.js';
 import { playRoulette } from './play-roulette.js';
 import { loadTheme, fitText } from './theme.js';
-import { parseLayout, fitPanel } from './layout.js';
+import { parseLayout, fitPanel, textBoost } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
 
 // Firebase(js/store.js)は demo のときは読み込まない(接続できない環境でも見本を表示できるように)
@@ -78,6 +78,7 @@ const themeReady = layout.theme
 // zoom が使えない古いブラウザだけ transform で代用する。
 const useZoom = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('zoom', '0.5');
 let lastFit = null; // 直近の台紙の倍率(debug 表示用)
+let boost = 1; // 縮めたときに結果の文字に掛けている倍率(--text-boost)
 
 function renderDebug() {
   if (!debug) return;
@@ -90,7 +91,7 @@ function renderDebug() {
     `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px  soft ${soft}`,
   ];
   if (lastFit) {
-    lines.push(`台紙 ${Math.round(lastFit.zoom * 100)}%  下端 ${lastFit.bottom}px${lastFit.shrunk ? '(コメント欄よけで縮小)' : ''}`);
+    lines.push(`台紙 ${Math.round(lastFit.zoom * 100)}%  下端 ${lastFit.bottom}px${lastFit.shrunk ? '(コメント欄よけで縮小)' : ''}${boost > 1 ? `  結果の文字 ×${boost.toFixed(2)}` : ''}`);
   }
   if (w > h) lines.push('⚠ 横長です。Web ソースを縦長(例 1080×1920)にしてください');
   else if (scale * dpr < 0.9) lines.push('⚠ 小さく描画されています。Web ソースの幅・高さを大きくしてください');
@@ -138,11 +139,13 @@ const legacyChips = !layout.theme;
 const maxChips = () => (legacyChips ? 3 : 2);
 
 function applyPanelLayout(mode) {
+  boost = 1;
   const m = layout[mode] || layout.gacha;
   resultsEl.replaceChildren(); // 前の結果を消す(コメント欄よけの有無に関係なく)
   resultsEl.style.minHeight = '';
   eventEl.style.zoom = '';
   eventEl.style.transform = '';
+  eventEl.style.removeProperty('--text-boost');
   slotEl.style.top = `${m.top}px`;
   if (!layout.safeBottom) {
     lastFit = fitPanel(m, 0, 0);
@@ -152,19 +155,29 @@ function applyPanelLayout(mode) {
     return;
   }
   // 結果の欄に最大件数ぶんの見本を入れて高さを測る
-  const samples = Array.from({ length: maxChips() }, () => {
-    const li = document.createElement('li');
-    li.className = 'chip';
-    li.textContent = 'R 見本の結果';
-    return li;
-  });
-  resultsEl.replaceChildren(...samples);
-  const reserved = resultsEl.offsetHeight;
-  const natural = eventEl.offsetHeight;
-  resultsEl.replaceChildren();
-  resultsEl.style.minHeight = `${reserved}px`;
-
+  const measure = () => {
+    const samples = Array.from({ length: maxChips() }, () => {
+      const li = document.createElement('li');
+      li.className = 'chip';
+      li.textContent = 'R 見本の結果';
+      return li;
+    });
+    resultsEl.replaceChildren(...samples);
+    const reserved = resultsEl.offsetHeight;
+    const natural = eventEl.offsetHeight;
+    resultsEl.replaceChildren();
+    return { reserved, natural };
+  };
+  let { reserved, natural } = measure();
   lastFit = fitPanel(m, natural, layout.safeBottom);
+  // 画像テーマ: 縮めた分だけ結果の文字を大きくし(上限あり)、大きくした文字で測り直す
+  boost = layout.theme ? textBoost(lastFit, m) : 1;
+  if (boost > 1) {
+    eventEl.style.setProperty('--text-boost', boost.toFixed(3));
+    ({ reserved, natural } = measure());
+    lastFit = fitPanel(m, natural, layout.safeBottom);
+  }
+  resultsEl.style.minHeight = `${reserved}px`;
   if (useZoom) eventEl.style.zoom = String(lastFit.zoom);
   else eventEl.style.setProperty('--panel-scale', String(lastFit.zoom));
   renderDebug();
@@ -212,6 +225,12 @@ function addChip(roll) {
     }
   }
   resultsEl.append(li);
+  // 画像テーマ: 縮めて文字を大きくしているとき、長い結果は1行に収まるところまで小さくする。
+  // 縮める前の大きさより小さくはしない(それでも入らなければ末尾を …)
+  if (!legacyChips && boost > 1) {
+    const base = parseFloat(getComputedStyle(li).fontSize);
+    fitText(li, base, Math.round(base / boost), { oneLine: true });
+  }
   renderCount();
 }
 
