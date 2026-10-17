@@ -2,12 +2,13 @@
 // js/api.js
 // ------------------------------------------------------------
 // 管理画面・テスト画面から Worker を呼ぶための関数。
-// Worker の URL と管理用の合言葉は、この端末のブラウザにだけ保存する。
+// Worker の URL・管理用の合言葉・表示用の合言葉は、この端末のブラウザにだけ保存する。
 // ============================================================
 import { DEFAULT_WORKER_URL } from './config.js';
 
 const KEY_URL = 'tm.workerUrl';
 const KEY_ADMIN = 'tm.adminKey';
+const keyDisplay = (env) => `tm.displayKey.${env === 'prod' ? 'prod' : 'test'}`;
 
 function read(key) {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -20,12 +21,32 @@ export function getConnection() {
   return {
     workerUrl: (read(KEY_URL) || DEFAULT_WORKER_URL).replace(/\/+$/, ''),
     adminKey: read(KEY_ADMIN),
+    // 表示画面の URL に付ける合言葉(Worker の DISPLAY_KEY_PROD / DISPLAY_KEY_TEST)
+    displayKeys: { prod: read(keyDisplay('prod')), test: read(keyDisplay('test')) },
   };
 }
 
-export function saveConnection({ workerUrl, adminKey }) {
+export function saveConnection({ workerUrl, adminKey, displayKeys = {} }) {
   write(KEY_URL, String(workerUrl || '').trim().replace(/\/+$/, ''));
   write(KEY_ADMIN, String(adminKey || '').trim());
+  for (const env of ['prod', 'test']) {
+    if (displayKeys[env] !== undefined) write(keyDisplay(env), String(displayKeys[env] || '').trim());
+  }
+}
+
+/**
+ * PRISM LIVE に設定する表示画面の URL に付けるパラメーター。
+ * 表示用の合言葉(dk)と、js/config.js と違う Worker を使う場合はその URL(w)。
+ * 合言葉が未設定なら null。
+ */
+export function streamParams(env) {
+  const c = getConnection();
+  const dk = c.displayKeys[env === 'prod' ? 'prod' : 'test'];
+  if (!dk) return null;
+  const out = { dk };
+  const defaultUrl = String(DEFAULT_WORKER_URL || '').trim().replace(/\/+$/, '');
+  if (c.workerUrl && c.workerUrl !== defaultUrl) out.w = c.workerUrl;
+  return out;
 }
 
 async function call(path, body) {
@@ -51,6 +72,8 @@ export const saveConfig = (env, config) => call(`/admin/config?env=${env}`, conf
 export const sendTestGift = (env, gift) => call(`/admin/test-gift?env=${env}`, gift);
 export const clearEnv = (env) => call(`/admin/clear?env=${env}`);
 export const copyConfig = (from, to) => call(`/admin/copy-config?from=${from}&to=${to}`);
+/** 表示画面の再生担当を外す(待機中の別の表示画面が次の確認で担当になる) */
+export const releasePlayer = (env) => call(`/admin/display/release?env=${env}`);
 
 /**
  * 接続テスト。どこで止まっているかを順番に調べ、

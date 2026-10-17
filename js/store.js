@@ -2,13 +2,13 @@
 // js/store.js
 // ------------------------------------------------------------
 // ブラウザ側で Firebase を直接扱うのはこのファイルだけ。
-// ブラウザは「読む」のが基本で、書き込むのは表示画面の再生位置だけ。
-// 設定の保存やテスト送信は Worker 経由(js/api.js)で行う。
+// ブラウザは「読む」だけ(Firebase のルールでブラウザからの書き込みは禁止)。
+// 設定の保存・テスト送信は Worker 経由(js/api.js)、表示画面の再生位置の保存も Worker 経由(js/player.js)。
 // ============================================================
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
-  getDatabase, ref, get, set, onValue, onChildAdded, query,
-  orderByKey, startAfter, limitToLast, serverTimestamp,
+  getDatabase, ref, get, onValue, onChildAdded, query,
+  orderByKey, startAfter, limitToLast,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { firebaseConfig } from './config.js';
 
@@ -53,16 +53,8 @@ export function watchConnection(onChange) {
   return onValue(ref(database(), '.info/connected'), (snap) => onChange(snap.val() === true));
 }
 
-// ---------------- 表示画面の再生位置 ----------------
-
-export async function getCursor(env) {
-  const snap = await get(envRef(env, 'state/display/lastPlayedKey'));
-  return snap.val();
-}
-
-export async function setCursor(env, key) {
-  await set(envRef(env, 'state/display'), { lastPlayedKey: key, updatedAt: serverTimestamp() });
-}
+// ---------------- 表示画面 ----------------
+// 再生位置は Worker が担当の確認つきで保存する(js/player.js)。ここでは読むだけ
 
 export async function latestQueueKey(env) {
   const snap = await get(query(envRef(env, 'queue'), limitToLast(1)));

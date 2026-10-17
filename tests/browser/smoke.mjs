@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import { sanitizeConfig } from '../../shared/core.js';
+import realWorker from '../../worker/src/index.js';
+import { resetTokenCache } from '../../worker/src/firebase.js';
+import { createFakeFirebase } from '../fake-firebase.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const shots = join(root, 'screenshots');
@@ -47,6 +51,34 @@ const stubConfig = `export const firebaseConfig = { apiKey: 'x', databaseURL: 'h
 export const DEFAULT_WORKER_URL = 'https://worker.test';`;
 
 const workerCalls = [];
+
+// ---- 再生担当・再生位置(/display/*)は、本物の Worker のコードを偽の Firebase に対して動かす ----
+const { privateKey: saKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+let wfb;
+let workerEnv;
+let workerDown = false; // true の間は /display/* に届かない(Worker 障害の再現)
+function resetWorker() {
+  wfb = createFakeFirebase();
+  resetTokenCache();
+  workerEnv = {
+    FIREBASE_DB_URL: wfb.dbUrl,
+    SA_CLIENT_EMAIL: 'sa@example.iam.gserviceaccount.com',
+    SA_PRIVATE_KEY: saKey.export({ type: 'pkcs8', format: 'pem' }),
+    WEBHOOK_KEY: 'hook', ADMIN_KEY: 'admin-secret', DISPLAY_KEY_PROD: 'dk-prod', DISPLAY_KEY_TEST: 'dk-test',
+  };
+}
+resetWorker();
+globalThis.fetch = (...a) => wfb.fetch(...a); // Worker から Firebase への通信を偽物へ
+const workerState = (env) => wfb.get(`envs/${env}/state/display`) || {};
+async function until(fn, timeout, label) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`時間切れ: ${label}`);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 
 async function newPage(viewport) {
@@ -61,6 +93,24 @@ async function newPage(viewport) {
   await page.route('https://worker.test/**', async (r) => {
     const url = new URL(r.request().url());
     const body = r.request().postData();
+    if (url.pathname.startsWith('/display/') || url.pathname === '/admin/display/release') {
+      if (workerDown && url.pathname.startsWith('/display/')) { await r.abort('failed'); return; }
+      if (r.request().method() === 'OPTIONS') {
+        await r.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' } });
+        return;
+      }
+      workerCalls.push({ path: url.pathname, search: url.search });
+      // 表示画面のキュー(ブラウザ側の偽 DB)を Worker 側の偽 DB に写す(再生位置の実在確認のため)
+      for (const e of ['test', 'prod']) {
+        const q = await page.evaluate((x) => window.__fakeDb?.get(`envs/${x}/queue`), e).catch(() => null);
+        if (q) for (const [k, v] of Object.entries(q)) if (!wfb.get(`envs/${e}/queue/${k}`)) wfb.set(`envs/${e}/queue/${k}`, v);
+      }
+      const res = await realWorker.fetch(new Request(url.toString(), {
+        method: r.request().method(), headers: r.request().headers(), body: body ?? undefined,
+      }), workerEnv, { waitUntil: () => {} });
+      await r.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: await res.text() });
+      return;
+    }
     workerCalls.push({ path: url.pathname, search: url.search, body: body ? JSON.parse(body) : null, key: r.request().headers()['x-admin-key'] });
     const replies = {
       '/': { ok: true, service: 'tikfinity-minigame', version: 'test', secrets: { FIREBASE_DB_URL: true, SA_CLIENT_EMAIL: true, SA_PRIVATE_KEY: true, WEBHOOK_KEY: false, ADMIN_KEY: true }, allowedOrigins: [] },
@@ -87,8 +137,8 @@ try {
   // ---------- 表示画面: 連続で届いた3件を順番に再生し、再生位置を保存する ----------
   {
     const { page, errors } = await newPage({ width: 540, height: 960 });
-    await page.goto(`${base}/display.html?env=test&speed=4`);
-    await page.waitForTimeout(300);
+    await page.goto(`${base}/display.html?env=test&dk=dk-test&speed=4`);
+    await page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 10000 });
     const order = [];
     await page.exposeFunction('__record', (t) => order.push(t));
     await page.evaluate(() => {
@@ -108,7 +158,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#ev-sender').textContent.startsWith('二郎'), null, { timeout: 15000 });
     await page.waitForTimeout(900);
     await page.screenshot({ path: join(shots, 'display-roulette.png') });
-    await page.waitForFunction((k) => window.__fakeDb.get('envs/test/state/display/lastPlayedKey') === k, keys[2], { timeout: 20000 });
+    await until(() => workerState('test').lastPlayedKey === keys[2], 20000, '再生位置の保存(Worker 経由)');
     const unique = order.filter((t, i) => t !== order[i - 1]);
     assert.deepEqual(unique, ['一郎 さん', '二郎 さん', '三郎 さん'], `再生順: ${unique}`);
     const transparent = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -118,13 +168,77 @@ try {
 
     // 読み込み直しても再生済みのものは再生しない
     const before = order.length;
+    const screenId = workerState('test').player.id;
+    const t0 = Date.now();
     await page.reload();
+    // 再読み込みしても待たずに担当へ戻る(期限切れの30秒を待たない)
+    await page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 5000 });
+    assert.ok(Date.now() - t0 < 5000);
+    assert.equal(workerState('test').player.id, screenId, '同じ画面(タブ)のまま担当');
     await page.waitForTimeout(1500);
     const visible = await page.evaluate(() => document.getElementById('event').classList.contains('show'));
     assert.equal(visible, false, '再読み込み後に再生済みを再生しない');
     assert.equal(order.length, before);
-    console.log('✔ 表示画面: 読み込み直しても二重再生しない');
+    console.log('✔ 表示画面: 読み込み直しても二重再生しない(待たずに担当へ戻る)');
     await page.close();
+  }
+
+  // ---------- 表示画面: 再生担当は1つだけ。切り替え・Worker 障害・本番とテストの分離 ----------
+  {
+    resetWorker();
+    const a = await newPage({ width: 360, height: 640 });
+    const b = await newPage({ width: 360, height: 640 });
+    const role = (p) => p.page.evaluate(() => document.body.dataset.player);
+    await a.page.goto(`${base}/display.html?env=test&dk=dk-test&speed=4`);
+    await a.page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 10000 });
+    await b.page.goto(`${base}/display.html?env=test&dk=dk-test&speed=4&debug=1`);
+    await b.page.waitForFunction(() => document.body.dataset.player === 'standby', null, { timeout: 10000 });
+    assert.match(await b.page.textContent('#notice'), /待機中/, 'debug=1 のときだけ待機中と表示');
+    // 同じギフトが両方の画面に届いても、再生するのは担当だけ
+    for (const p of [a, b]) await p.page.evaluate((it) => window.__fakeDb.push('envs/test/queue', it), item('同時', 'gacha', ['釣り']));
+    await a.page.waitForFunction(() => document.getElementById('event').classList.contains('show'), null, { timeout: 5000 });
+    await b.page.waitForTimeout(1500);
+    assert.equal(await b.page.evaluate(() => document.getElementById('event').classList.contains('show')), false, '待機中の画面は再生しない');
+    // 担当が動いているあいだは奪われない
+    await b.page.waitForTimeout(11000);
+    assert.equal(await role(b), 'standby');
+    assert.equal(await role(a), 'player');
+    console.log('✔ 再生担当: 同時に開いても再生は1つ、動いている担当は奪われない');
+
+    // 管理画面から担当を外すと、待機中の画面が引き継ぎ、元の画面は待機になる
+    const adm = await realWorker.fetch(new Request('https://w/admin/display/release?env=test', { method: 'POST', headers: { 'X-Admin-Key': 'admin-secret' }, body: '{}' }), workerEnv, { waitUntil: () => {} });
+    assert.equal((await adm.json()).released, true);
+    await b.page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 15000 });
+    await a.page.waitForFunction(() => document.body.dataset.player === 'standby', null, { timeout: 15000 });
+    console.log('✔ 再生担当: 管理画面からの切り替え');
+
+    // Worker に届かないあいだも再生は続け、再生位置の保存は復旧後にやり直して届く
+    workerDown = true;
+    const k = await b.page.evaluate((it) => window.__fakeDb.push('envs/test/queue', it), item('障害中', 'gacha', ['料理']));
+    await b.page.waitForFunction(() => document.getElementById('ev-sender').textContent.startsWith('障害中'), null, { timeout: 8000 });
+    await b.page.waitForTimeout(4000);
+    assert.notEqual(workerState('test').lastPlayedKey, k, '障害中は保存できない');
+    workerDown = false;
+    await until(() => workerState('test').lastPlayedKey === k, 25000, '復旧後に再生位置が保存される');
+    assert.equal(await role(b), 'player', '担当のまま');
+    console.log('✔ 再生担当: Worker 障害のあいだは保存をやり直し、復旧後に保存');
+
+    // 本番とテストは別々: テストの合言葉では本番の担当になれない。本番の担当はテストと別に持てる
+    const pWrong = await newPage({ width: 360, height: 640 });
+    await pWrong.page.goto(`${base}/display.html?env=prod&dk=dk-test&speed=4`);
+    await pWrong.page.waitForFunction(() => document.body.dataset.player === 'error', null, { timeout: 10000 });
+    assert.match(await pWrong.page.textContent('#notice'), /合言葉/, '設定の誤りは画面に出す');
+    const pOk = await newPage({ width: 360, height: 640 });
+    await pOk.page.goto(`${base}/display.html?env=prod&dk=dk-prod&speed=4`);
+    await pOk.page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 10000 });
+    assert.equal(workerState('test').player.id !== workerState('prod').player.id, true);
+    // 合言葉が URL に無ければ再生せず案内を出す
+    const pNone = await newPage({ width: 360, height: 640 });
+    await pNone.page.goto(`${base}/display.html?env=test&speed=4`);
+    await pNone.page.waitForFunction(() => /合言葉/.test(document.getElementById('notice').textContent), null, { timeout: 10000 });
+    for (const p of [a, b, pWrong, pOk, pNone]) assert.deepEqual(p.errors.filter((e) => !/Failed to load resource|ERR_FAILED/.test(e)), []);
+    console.log('✔ 再生担当: 本番とテストの合言葉・担当・再生位置は別々');
+    for (const p of [a, b, pWrong, pOk, pNone]) await p.page.close();
   }
 
   // ---------- 表示画面: demo/debug で大きさの確認ができ、zoom で拡縮される ----------
@@ -293,6 +407,8 @@ try {
     const { page, errors } = await newPage({ width: 390, height: 844 });
     await page.addInitScript(() => {
       localStorage.setItem('tm.adminKey', 'admin-secret');
+      localStorage.setItem('tm.displayKey.prod', 'dk-prod');
+      localStorage.setItem('tm.displayKey.test', 'dk-test');
     });
     await page.goto(`${base}/admin.html?env=test`);
     page.on('dialog', (d) => d.accept());
@@ -340,6 +456,8 @@ try {
     await range.evaluate((el) => { el.value = '300'; el.dispatchEvent(new Event('input', { bubbles: true })); });
     const urls = await page.$$eval('#layout-editor code', (els) => els.map((e) => e.textContent));
     assert.ok(urls[0].includes('env=prod') && urls[0].includes('theme=wafu') && urls[0].includes('g=300%2C100'), `URL: ${urls[0]}`);
+    assert.ok(urls[0].includes('dk=dk-prod') && urls[1].includes('dk=dk-test'), `表示用の合言葉は環境ごと: ${urls}`);
+    assert.ok(!urls.join().includes('admin-secret'), '管理用の合言葉は URL に入らない');
     await page.waitForFunction(() => document.querySelector('#layout-editor iframe')?.src.includes('demo=gacha'), null, { timeout: 5000 });
     assert.ok((await page.textContent('#url-display')).includes('theme=wafu'), 'URL の案内にも反映');
     // 従来デザインに戻すと、従来の初期値のまま(和風で動かした値の影響を受けない)
@@ -352,6 +470,17 @@ try {
     assert.ok(wafuAgain.includes('g=300%2C100') && wafuAgain.includes('theme=wafu') && wafuAgain.includes('safe=1100'), `和風: ${wafuAgain}`);
     await page.screenshot({ path: join(shots, 'admin-layout.png'), fullPage: true });
     console.log('✔ 管理画面: 表示の調整で URL を作れる');
+
+    // 再生担当の表示と「再生担当を外す」
+    resetWorker();
+    wfb.set('envs/test/state/display', { lastPlayedKey: '-T0000000001', player: { id: 'scr-old', tokenHash: 'x', since: Date.now(), expiresAt: Date.now() + 30000, gen: 1 } });
+    await page.evaluate((st) => window.__fakeDb.set('envs/test/state/display', st), wfb.get('envs/test/state/display'));
+    await page.click('#player-card summary');
+    await page.waitForFunction(() => document.getElementById('player-status').textContent.includes('担当あり'), null, { timeout: 5000 });
+    await page.click('#player-release');
+    await until(() => !workerState('test').player, 5000, '担当を外す');
+    assert.equal(workerState('test').lastPlayedKey, '-T0000000001', '再生位置は残る');
+    console.log('✔ 管理画面: 再生担当の表示と切り替え');
     await page.close();
   }
 

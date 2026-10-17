@@ -24,6 +24,13 @@
       <label class="field">管理用の合言葉(Worker の ADMIN_KEY)
         <input id="conn-key" type="password" autocomplete="off">
       </label>
+      <label class="field">表示用の合言葉・本番(Worker の DISPLAY_KEY_PROD)
+        <input id="conn-dk-prod" type="password" autocomplete="off">
+      </label>
+      <label class="field">表示用の合言葉・テスト(Worker の DISPLAY_KEY_TEST)
+        <input id="conn-dk-test" type="password" autocomplete="off">
+      </label>
+      <p class="hint">表示用の合言葉は PRISM LIVE に設定する表示画面の URL に入ります。管理用の合言葉とは別の値にしてください。</p>
       <div class="btn-row">
         <button class="btn btn--primary" id="conn-save">保存</button>
         <button class="btn" id="conn-test">接続テスト</button>
@@ -38,6 +45,13 @@
       <div class="copy-row"><code id="url-display"></code><button class="btn btn--small" data-copy="url-display">コピー</button></div>
       <p class="hint">TikFinity の Webhook に設定する URL(「合言葉」の部分を Worker の WEBHOOK_KEY に置き換え)</p>
       <div class="copy-row"><code id="url-webhook"></code><button class="btn btn--small" data-copy="url-webhook">コピー</button></div>
+    </details>
+
+    <details class="card" id="player-card">
+      <summary>表示画面の再生担当</summary>
+      <p class="hint">同じ環境で再生する表示画面は1つだけです。別の表示画面(PRISM など)に切り替える時は、担当を外してください。待機中の画面が10秒ほどで引き継ぎます。</p>
+      <p id="player-status" class="hint">確認中…</p>
+      <div class="btn-row"><button class="btn" id="player-release">再生担当を外す</button></div>
     </details>
 
     <details class="card" id="layout-card">

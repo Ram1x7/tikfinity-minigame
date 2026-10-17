@@ -10,6 +10,7 @@
 import { h, copyText, toast } from './dom.js';
 import { pageUrl } from './env.js';
 import { LAYOUT_LIMITS, defaultLayout, parseLayout, layoutToParams } from './layout.js';
+import { streamParams } from './api.js';
 
 const KEY_THEME = 'tm.layout.theme';
 const keyFor = (theme) => `tm.layout.${theme || 'classic'}`;
@@ -52,6 +53,13 @@ export function displayUrl(env, layout, extra = {}) {
   return pageUrl('display.html', { env, ...layoutToParams(layout), ...extra });
 }
 
+/** PRISM LIVE に設定する URL(表示用の合言葉付き)。合言葉が未設定なら案内の文 */
+export function streamUrl(env, layout) {
+  const p = streamParams(env);
+  if (!p) return `(先に「接続設定」で表示用の合言葉(${env === 'prod' ? '本番' : 'テスト'})を入力してください)`;
+  return displayUrl(env, layout, p);
+}
+
 function slider(label, unit, [min, max], step, value, onInput, { disabled = false } = {}) {
   const out = h('output', {}, `${value}${unit}`);
   const range = h('input', {
@@ -78,8 +86,8 @@ export function initLayoutEditor(container, env, onChange) {
 
   function refresh() {
     saveLayout(layout);
-    urlProd.textContent = displayUrl('prod', layout);
-    urlTest.textContent = displayUrl('test', layout);
+    urlProd.textContent = streamUrl('prod', layout);
+    urlTest.textContent = streamUrl('test', layout);
     onChange?.(layout);
     clearTimeout(timer);
     timer = setTimeout(() => {

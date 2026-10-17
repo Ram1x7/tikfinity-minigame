@@ -2,11 +2,14 @@
 // js/display.js  表示画面(PRISM LIVE に重ねるページ)
 // ------------------------------------------------------------
 // Worker がキューに積んだ結果を、届いた順に1件ずつ最後まで再生する。
-// 抽選はしない。再生が終わるたびに「どこまで再生したか」を Firebase に保存するので、
+// 抽選はしない。再生が終わるたびに「どこまで再生したか」を Worker 経由で保存するので、
 // ページを読み込み直しても続きから再生され、二重再生も取りこぼしも起きない。
+// 同じ環境で再生するのは「再生担当」の表示画面1つだけ(js/player.js)。ほかの画面は待機する。
 //
 // URL パラメータ
 //   ?env=prod      本番のキューを再生(省略時はテスト)
+//   &dk=合言葉     表示用の合言葉(Worker の DISPLAY_KEY_PROD / DISPLAY_KEY_TEST)。再生担当・再生位置の保存に使う
+//   &w=URL         Worker の URL(js/config.js の DEFAULT_WORKER_URL があれば省略可)
 //   &theme=wafu    画像テーマ(images/themes/<名前>/)。省略時は従来のデザイン
 //   &g=110,100     ガチャの台紙の上端(px)・大きさ(%)     ┐ 管理画面の「表示の調整」で作る
 //   &r=110,100     ルーレットの台紙の上端(px)・大きさ(%) │ (js/layout.js)
@@ -27,9 +30,11 @@ import { playRoulette } from './play-roulette.js';
 import { loadTheme, fitText, themeRarityColor } from './theme.js';
 import { parseLayout, fitPanel, textBoost } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
+import { createPlayer, playerParams } from './player.js';
 
 // Firebase(js/store.js)は demo のときは読み込まない(接続できない環境でも見本を表示できるように)
 let store = null;
+let player = null; // 再生担当(preview・demo では使わない)
 
 const params = new URLSearchParams(location.search);
 const env = getEnv();
@@ -286,6 +291,9 @@ async function drain() {
   if (playing) return;
   playing = true;
   while (queue.length > 0) {
+    // 再生担当が Worker と通信できていないあいだは、新しい再生を始めない(二重再生を避ける)
+    while (player && player.active && !player.canPlay()) await sleep(1000);
+    if (player && !player.active) break;
     const { key, item } = queue.shift();
     updatePending();
     try {
@@ -293,10 +301,8 @@ async function drain() {
     } catch (err) {
       console.error('再生に失敗しました', err);
     }
-    // 失敗しても先に進む(同じ項目で止まり続けないように)
-    if (!preview && !demo) {
-      try { await store.setCursor(env, key); } catch (err) { console.error('再生位置の保存に失敗', err); }
-    }
+    // 失敗しても先に進む(同じ項目で止まり続けないように)。保存は裏でやり直し続ける
+    if (player) player.saveCursor(key);
   }
   eventEl.classList.remove('show');
   playing = false;
@@ -350,34 +356,81 @@ async function start() {
   await themeReady;
   if (demo) return startDemo();
   store = await import('./store.js');
-  const {
-    isConfigured, watchConfig, watchConnection, getCursor, setCursor,
-    latestQueueKey, watchQueueAfter,
-  } = store;
+  const { isConfigured, watchConfig, watchConnection, latestQueueKey, watchQueueAfter } = store;
 
   if (!isConfigured()) {
     notice('js/config.js に Firebase の接続情報を設定してください');
     return;
   }
 
-  watchConnection((ok) => notice(ok ? '' : 'Firebase に接続できません'));
+  watchConnection((ok) => setStatus('firebase', ok ? '' : 'Firebase に接続できません'));
   watchConfig(env, (config) => { settings = { staleMinutes: 10, ...config.settings }; });
 
-  let cursor = preview || params.get('skip') === '1' ? null : await getCursor(env);
-  if (!cursor) {
-    // 初回(またはskip・プレビュー)は、今あるキューは再生済みとして扱い、これから届く分だけ再生する
-    cursor = await latestQueueKey(env);
-    if (cursor && !preview) await setCursor(env, cursor);
+  const follow = (cursor) => {
+    const seen = new Set();
+    return watchQueueAfter(env, cursor, (key, item) => {
+      if (seen.has(key) || !item) return;
+      seen.add(key);
+      queue.push({ key, item });
+      updatePending();
+      drain();
+    });
+  };
+
+  // プレビュー(管理・テスト画面の確認用)は再生担当にならず、開いた後に届いた分だけ再生する
+  if (preview) {
+    follow(await latestQueueKey(env));
+    return;
   }
 
-  const seen = new Set();
-  watchQueueAfter(env, cursor, (key, item) => {
-    if (seen.has(key) || !item) return;
-    seen.add(key);
-    queue.push({ key, item });
-    updatePending();
-    drain();
+  // 再生担当になってから再生する。担当でなくなったら止めて、また担当になれるまで待つ
+  let skipOnce = params.get('skip') === '1';
+  let lost = () => {};
+  player = createPlayer({
+    env,
+    ...playerParams(params),
+    onStatus: (s) => {
+      document.body.dataset.player = s.kind; // 状態の確認用(画面には出ない)
+      setStatus('player', playerMessage(s));
+    },
+    onLost: () => lost(),
   });
+  window.addEventListener('pagehide', () => player.release());
+  for (;;) {
+    let saved;
+    try {
+      ({ cursor: saved } = await player.acquire());
+    } catch {
+      return; // URL の設定不足(画面に案内を出している)
+    }
+    let cursor = skipOnce ? null : saved;
+    skipOnce = false;
+    if (!cursor) {
+      // 初回(または skip)は、今あるキューは再生済みとして扱い、これから届く分だけ再生する
+      cursor = await latestQueueKey(env);
+      if (cursor) player.saveCursor(cursor);
+    }
+    const stopLost = new Promise((resolve) => { lost = resolve; });
+    const unwatch = follow(cursor);
+    await stopLost;
+    unwatch();
+    queue.length = 0;
+    updatePending();
+  }
+}
+
+// ---------------- 状態の表示 ----------------
+// 設定の誤り・接続の問題は画面に出す。待機中は配信に映さない(debug=1 のときだけ表示)
+const statuses = { firebase: '', player: '' };
+function setStatus(kind, text) {
+  statuses[kind] = text || '';
+  notice(statuses.firebase || statuses.player);
+}
+function playerMessage(s) {
+  if (s.kind === 'error') return s.message;
+  if (s.kind === 'offline') return debug ? s.message : '';
+  if (s.kind === 'standby') return debug ? s.message : '';
+  return '';
 }
 
 start().catch((err) => {

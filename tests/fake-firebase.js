@@ -1,6 +1,8 @@
 // テスト用: Firebase Realtime Database REST API と Google のトークン発行を
 // メモリ上で真似する fetch。Worker を実際の通信なしで最後まで動かすために使う。
 
+import { createHash } from 'node:crypto';
+
 const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
 
 export function createFakeFirebase({ dbUrl = 'https://fake-db.firebaseio.com' } = {}) {
@@ -62,7 +64,8 @@ export function createFakeFirebase({ dbUrl = 'https://fake-db.firebaseio.com' } 
     prune(root);
   }
 
-  const etagOf = (v) => (v === null ? 'null_etag' : 'e' + Buffer.from(JSON.stringify(v)).toString('base64').slice(0, 24) + JSON.stringify(v).length);
+  // 内容が変われば必ず変わる ETag(本物と同じく、中身のハッシュ)
+  const etagOf = (v) => (v === null ? 'null_etag' : 'e' + createHash('sha256').update(JSON.stringify(v)).digest('base64url'));
 
   async function fakeFetch(input, init = {}) {
     const url = new URL(typeof input === 'string' ? input : input.url);

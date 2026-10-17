@@ -5,11 +5,11 @@
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
 import { getEnv, envLabel, urlWithEnv } from './env.js';
-import { isConfigured, loadConfig, watchRecentLog, watchConnection } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose } from './api.js';
+import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState } from './store.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
-import { initLayoutEditor, loadSavedLayout, displayUrl } from './layout-editor.js';
+import { initLayoutEditor, loadSavedLayout, streamUrl } from './layout-editor.js';
 import {
   sanitizeConfig, probabilities, normalizeGift, DEFAULT_SETTINGS, RARITIES, LIMITS,
 } from '../shared/core.js';
@@ -71,7 +71,7 @@ let currentLayout = loadSavedLayout();
 
 function renderUrls() {
   const { workerUrl } = getConnection();
-  $('url-display').textContent = displayUrl(env, currentLayout);
+  $('url-display').textContent = streamUrl(env, currentLayout);
   $('url-webhook').textContent = workerUrl
     ? `${workerUrl}/webhook?env=${env}&k=合言葉`
     : '(先に「接続設定」で Worker の URL を入力してください)';
@@ -86,10 +86,13 @@ function renderConnection() {
   const c = getConnection();
   $('conn-url').value = c.workerUrl;
   $('conn-key').value = c.adminKey;
+  $('conn-dk-prod').value = c.displayKeys.prod;
+  $('conn-dk-test').value = c.displayKeys.test;
   const missing = [];
   if (!isConfigured()) missing.push('js/config.js の Firebase 接続情報');
   if (!c.workerUrl) missing.push('Worker の URL');
   if (!c.adminKey) missing.push('管理用の合言葉');
+  if (!c.displayKeys[env]) missing.push(`表示用の合言葉(${envLabel(env)})`);
   $('conn-status').textContent = missing.length ? `未設定: ${missing.join('、')}` : '設定済み';
   if (missing.length) $('conn-card').open = true;
 }
@@ -112,10 +115,37 @@ $('conn-test').addEventListener('click', async () => {
 });
 
 $('conn-save').addEventListener('click', () => {
-  saveConnection({ workerUrl: $('conn-url').value, adminKey: $('conn-key').value });
+  saveConnection({
+    workerUrl: $('conn-url').value,
+    adminKey: $('conn-key').value,
+    displayKeys: { prod: $('conn-dk-prod').value, test: $('conn-dk-test').value },
+  });
   renderConnection();
   renderUrls();
   toast('接続設定を保存しました');
+});
+
+// ---------------- 表示画面の再生担当 ----------------
+let playerState = {};
+function renderPlayer() {
+  const p = playerState.player;
+  const now = Date.now();
+  let text;
+  if (!p) text = '担当なし(次に開いた表示画面が担当になります)';
+  else if (p.expiresAt > now) text = `担当あり: 画面 ${String(p.id).slice(-6)}(${formatTime(p.since)} から。応答あり)`;
+  else text = `担当の応答なし(期限切れ。次に要求した表示画面が引き継ぎます): 画面 ${String(p.id).slice(-6)}`;
+  $('player-status').textContent = text;
+  $('player-release').disabled = !p;
+}
+
+$('player-release').addEventListener('click', async () => {
+  if (env === 'prod' && !confirm('本番の再生担当を外します。配信中の表示画面は待機に切り替わり、別の表示画面が担当になります。よろしいですか?')) return;
+  try {
+    const r = await releasePlayer(env);
+    toast(r.released ? '再生担当を外しました' : '担当はいませんでした');
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 // ---------------- ギフト設定 ----------------
@@ -338,6 +368,8 @@ async function start() {
   }
   watchConnection((ok) => { $('log-conn').textContent = ok ? '' : 'Firebase に接続できません'; });
   watchRecentLog(env, 30, renderLog);
+  watchDisplayState(env, (s) => { playerState = s; renderPlayer(); });
+  setInterval(renderPlayer, 5000); // 期限切れの表示を更新する
 }
 
 start();

@@ -10,7 +10,10 @@
 //   POST /admin/test-gift?env=     テスト用の疑似ギフト(Webhookと同じ処理を通す)
 //   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
 //   POST /admin/copy-config?from=test&to=prod   設定のコピー
+//   POST /admin/display/release?env=   表示画面の再生担当を外す(別の画面に切り替える)
 //   (/admin/* は X-Admin-Key ヘッダーが必要)
+//   POST /display/claim|heartbeat|cursor|release?env=   表示画面の再生担当・再生位置(worker/src/display.js)
+//   (/display/* は表示用の合言葉 DISPLAY_KEY_PROD / DISPLAY_KEY_TEST が必要)
 //
 // 【Worker の環境変数(シークレット)】
 //   FIREBASE_DB_URL   例: https://xxxx-default-rtdb.firebaseio.com
@@ -18,6 +21,8 @@
 //   SA_PRIVATE_KEY    サービスアカウントの private_key (PEM)
 //   WEBHOOK_KEY       TikFinity の Webhook URL に付ける合言葉
 //   ADMIN_KEY         管理画面・テスト画面で使う合言葉
+//   DISPLAY_KEY_PROD  本番の表示画面(PRISM に設定する URL)に付ける合言葉
+//   DISPLAY_KEY_TEST  テストの表示画面に付ける合言葉(本番と別の値にする)
 //   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
 // ============================================================
 
@@ -31,14 +36,16 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
+import { reply, safeEqual } from './http.js';
+import { handleDisplay, releaseByAdmin } from './display.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WORKER_VERSION = '1.2.0';
+export const WORKER_VERSION = '1.3.0';
 
-const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY'];
+const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
 /**
  * ALLOWED_ORIGIN をオリジン(https://ホスト名)の一覧に直す。
@@ -68,25 +75,9 @@ function corsHeaders(env, request) {
   };
 }
 
-function reply(cors, status, data) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors },
-  });
-}
-
 /** どのシークレットが設定されているか(値そのものは返さない) */
 function secretStatus(env) {
   return Object.fromEntries(SECRET_NAMES.map((n) => [n, Boolean(env[n] && String(env[n]).trim())]));
-}
-
-/** 長さに依存しない比較(合言葉の総当たり対策) */
-function safeEqual(a, b) {
-  const x = new TextEncoder().encode(String(a || ''));
-  const y = new TextEncoder().encode(String(b || ''));
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
-  return diff === 0 && x.length > 0;
 }
 
 /** クエリ・form・JSON のどれで届いても平たいオブジェクトにまとめる */
@@ -271,6 +262,10 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     return reply(cors, 200, result);
   }
 
+  if (path === '/admin/display/release') {
+    return reply(cors, 200, await releaseByAdmin(db, envName));
+  }
+
   if (path === '/admin/clear') {
     await db.patch(`envs/${envName}`, { queue: null, dedupe: null, log: null, state: null });
     return reply(cors, 200, { ok: true });
@@ -315,6 +310,10 @@ export default {
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
+      }
+
+      if (url.pathname.startsWith('/display/')) {
+        return await handleDisplay(request, env, db, url, cors);
       }
 
       if (url.pathname.startsWith('/admin/')) {
