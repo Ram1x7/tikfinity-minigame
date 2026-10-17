@@ -57,6 +57,8 @@ const { privateKey: saKey } = generateKeyPairSync('rsa', { modulusLength: 2048 }
 let wfb;
 let workerEnv;
 let workerDown = false; // true の間は /display/* に届かない(Worker 障害の再現)
+// 表示画面に伝える担当の期限・更新間隔を短くする(障害で再生が止まるまでを短い時間で確かめるため。Worker 側の判断は変えない)
+let clientTiming = null;
 function resetWorker() {
   wfb = createFakeFirebase();
   resetTokenCache();
@@ -108,7 +110,12 @@ async function newPage(viewport) {
       const res = await realWorker.fetch(new Request(url.toString(), {
         method: r.request().method(), headers: r.request().headers(), body: body ?? undefined,
       }), workerEnv, { waitUntil: () => {} });
-      await r.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: await res.text() });
+      let text = await res.text();
+      if (clientTiming && url.pathname === '/display/claim') {
+        const data = JSON.parse(text);
+        if (data.role === 'player') text = JSON.stringify({ ...data, ...clientTiming });
+      }
+      await r.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: text });
       return;
     }
     workerCalls.push({ path: url.pathname, search: url.search, body: body ? JSON.parse(body) : null, key: r.request().headers()['x-admin-key'] });
@@ -239,6 +246,39 @@ try {
     for (const p of [a, b, pWrong, pOk, pNone]) assert.deepEqual(p.errors.filter((e) => !/Failed to load resource|ERR_FAILED/.test(e)), []);
     console.log('✔ 再生担当: 本番とテストの合言葉・担当・再生位置は別々');
     for (const p of [a, b, pWrong, pOk, pNone]) await p.page.close();
+  }
+
+  // Worker が長く止まると新しい再生を止め、復旧後に未再生分を順番どおり再生する
+  {
+    resetWorker();
+    clientTiming = { ttlMs: 4000, heartbeatMs: 1000 };
+    const c = await newPage({ width: 360, height: 640 });
+    await c.page.goto(`${base}/display.html?env=test&dk=dk-test&speed=4`);
+    await c.page.waitForFunction(() => document.body.dataset.player === 'player', null, { timeout: 10000 });
+    const seenOrder = [];
+    await c.page.exposeFunction('__rec', (t) => seenOrder.push(t));
+    await c.page.evaluate(() => new MutationObserver(() => {
+      const t = document.getElementById('ev-sender').textContent;
+      if (t) window.__rec(t);
+    }).observe(document.getElementById('ev-sender'), { childList: true, characterData: true, subtree: true }));
+    workerDown = true;
+    const names = ['停止1', '停止2', '停止3', '停止4'];
+    const ks = [];
+    for (const n of names) ks.push(await c.page.evaluate((it) => window.__fakeDb.push('envs/test/queue', it), item(n, 'gacha', ['釣り'])));
+    // 期限(4秒)を過ぎても Worker に届かないので、途中で新しい再生を止めて待つ
+    await c.page.waitForTimeout(12000);
+    const during = seenOrder.filter((t, i) => t !== seenOrder[i - 1]);
+    assert.ok(during.length < names.length, `障害中は途中で止まる: ${during}`);
+    assert.equal(await c.page.evaluate(() => document.body.dataset.player), 'offline');
+    assert.notEqual(workerState('test').lastPlayedKey, ks[3]);
+    workerDown = false;
+    await until(() => workerState('test').lastPlayedKey === ks[3], 40000, '復旧後に最後まで再生して保存');
+    const all = seenOrder.filter((t, i) => t !== seenOrder[i - 1]);
+    assert.deepEqual(all, names.map((n) => `${n} さん`), `復旧後も順番どおり・重複なし: ${all}`);
+    assert.equal(await c.page.evaluate(() => document.body.dataset.player), 'player');
+    clientTiming = null;
+    await c.page.close();
+    console.log(`✔ 再生担当: Worker 停止中は再生を止め、復旧後に未再生分を順番どおり再生(停止中に再生 ${during.length} 件)`);
   }
 
   // ---------- 表示画面: demo/debug で大きさの確認ができ、zoom で拡縮される ----------
@@ -456,8 +496,15 @@ try {
     await range.evaluate((el) => { el.value = '300'; el.dispatchEvent(new Event('input', { bubbles: true })); });
     const urls = await page.$$eval('#layout-editor code', (els) => els.map((e) => e.textContent));
     assert.ok(urls[0].includes('env=prod') && urls[0].includes('theme=wafu') && urls[0].includes('g=300%2C100'), `URL: ${urls[0]}`);
-    assert.ok(urls[0].includes('dk=dk-prod') && urls[1].includes('dk=dk-test'), `表示用の合言葉は環境ごと: ${urls}`);
-    assert.ok(!urls.join().includes('admin-secret'), '管理用の合言葉は URL に入らない');
+    // 画面では表示用の合言葉を伏せ、コピーする値には環境ごとの合言葉が入る
+    assert.ok(urls.every((u) => u.includes('dk=●●●●●●') && !u.includes('dk-prod') && !u.includes('dk-test')), `画面では伏せる: ${urls}`);
+    const values = await page.$$eval('#layout-editor code', (els) => els.map((e) => e.dataset.value));
+    assert.ok(values[0].includes('dk=dk-prod') && values[1].includes('dk=dk-test'), '表示用の合言葉は環境ごと');
+    assert.ok(!values.join().includes('admin-secret'), '管理用の合言葉は URL に入らない');
+    const shown = await page.textContent('#url-display');
+    const html = (await page.content()).replace(/data-value="[^"]*"/g, '');
+    const at = html.indexOf('dk=dk-');
+    assert.ok(!shown.includes('dk-test') && at < 0, `URL の案内も伏せる: ${at >= 0 ? html.slice(at - 200, at + 50) : ''}`);
     await page.waitForFunction(() => document.querySelector('#layout-editor iframe')?.src.includes('demo=gacha'), null, { timeout: 5000 });
     assert.ok((await page.textContent('#url-display')).includes('theme=wafu'), 'URL の案内にも反映');
     // 従来デザインに戻すと、従来の初期値のまま(和風で動かした値の影響を受けない)
@@ -477,7 +524,11 @@ try {
     await page.evaluate((st) => window.__fakeDb.set('envs/test/state/display', st), wfb.get('envs/test/state/display'));
     await page.click('#player-card summary');
     await page.waitForFunction(() => document.getElementById('player-status').textContent.includes('担当あり'), null, { timeout: 5000 });
+    let dialogText = '';
+    page.once('dialog', (d) => { dialogText = d.message(); });
     await page.click('#player-release');
+    await until(() => dialogText, 3000, '確認ダイアログ');
+    assert.match(dialogText, /最大30秒/, '待機画面が無いと止まることを明示');
     await until(() => !workerState('test').player, 5000, '担当を外す');
     assert.equal(workerState('test').lastPlayedKey, '-T0000000001', '再生位置は残る');
     console.log('✔ 管理画面: 再生担当の表示と切り替え');

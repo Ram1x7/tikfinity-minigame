@@ -9,7 +9,7 @@ import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplay
 import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
-import { initLayoutEditor, loadSavedLayout, streamUrl } from './layout-editor.js';
+import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
 import {
   sanitizeConfig, probabilities, normalizeGift, DEFAULT_SETTINGS, RARITIES, LIMITS,
 } from '../shared/core.js';
@@ -71,14 +71,14 @@ let currentLayout = loadSavedLayout();
 
 function renderUrls() {
   const { workerUrl } = getConnection();
-  $('url-display').textContent = streamUrl(env, currentLayout);
+  showStreamUrl($('url-display'), env, currentLayout); // 画面では合言葉を伏せる
   $('url-webhook').textContent = workerUrl
     ? `${workerUrl}/webhook?env=${env}&k=合言葉`
     : '(先に「接続設定」で Worker の URL を入力してください)';
 }
 
 document.querySelectorAll('[data-copy]').forEach((btn) => {
-  btn.addEventListener('click', () => copyText($(btn.dataset.copy).textContent));
+  btn.addEventListener('click', () => copyText(urlValue($(btn.dataset.copy))));
 });
 
 // ---------------- 接続設定 ----------------
@@ -139,7 +139,14 @@ function renderPlayer() {
 }
 
 $('player-release').addEventListener('click', async () => {
-  if (env === 'prod' && !confirm('本番の再生担当を外します。配信中の表示画面は待機に切り替わり、別の表示画面が担当になります。よろしいですか?')) return;
+  const message = [
+    `${envLabel(env)}の再生担当を外します。`,
+    '・いま再生している表示画面は待機に切り替わり、待機中の別の表示画面が10秒ほどで引き継ぎます。',
+    '・待機中の表示画面が無い場合は、外した画面が30秒後に担当へ戻るまで、最大30秒ほど再生が止まります(その間に届いたギフトは、再開後に順番に再生されます)。',
+    '',
+    'よろしいですか?',
+  ].join('\n');
+  if (!confirm(message)) return;
   try {
     const r = await releasePlayer(env);
     toast(r.released ? '再生担当を外しました' : '担当はいませんでした');

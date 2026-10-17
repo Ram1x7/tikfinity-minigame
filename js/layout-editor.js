@@ -53,12 +53,31 @@ export function displayUrl(env, layout, extra = {}) {
   return pageUrl('display.html', { env, ...layoutToParams(layout), ...extra });
 }
 
-/** PRISM LIVE に設定する URL(表示用の合言葉付き)。合言葉が未設定なら案内の文 */
+/** PRISM LIVE に設定する URL(表示用の合言葉付き)。合言葉が未設定なら null */
 export function streamUrl(env, layout) {
   const p = streamParams(env);
-  if (!p) return `(先に「接続設定」で表示用の合言葉(${env === 'prod' ? '本番' : 'テスト'})を入力してください)`;
-  return displayUrl(env, layout, p);
+  return p ? displayUrl(env, layout, p) : null;
 }
+
+/** 画面に出すときは表示用の合言葉を伏せる(dk=●●●●) */
+export function maskUrl(url) {
+  return String(url).replace(/([?&]dk=)[^&#]*/, '$1●●●●●●');
+}
+
+/**
+ * URL を表示する要素に入れる。画面には合言葉を伏せた URL を出し、
+ * コピーボタンは data-value の本物の URL をコピーする。
+ */
+export function showStreamUrl(el, env, layout) {
+  const url = streamUrl(env, layout);
+  el.dataset.value = url || '';
+  el.textContent = url
+    ? maskUrl(url)
+    : `(先に「接続設定」で表示用の合言葉(${env === 'prod' ? '本番' : 'テスト'})を入力してください)`;
+}
+
+/** コピーボタン用: 本物の URL(合言葉入り)を返す */
+export const urlValue = (el) => el.dataset.value || el.textContent;
 
 function slider(label, unit, [min, max], step, value, onInput, { disabled = false } = {}) {
   const out = h('output', {}, `${value}${unit}`);
@@ -86,8 +105,8 @@ export function initLayoutEditor(container, env, onChange) {
 
   function refresh() {
     saveLayout(layout);
-    urlProd.textContent = streamUrl('prod', layout);
-    urlTest.textContent = streamUrl('test', layout);
+    showStreamUrl(urlProd, 'prod', layout);
+    showStreamUrl(urlTest, 'test', layout);
     onChange?.(layout);
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -138,9 +157,9 @@ export function initLayoutEditor(container, env, onChange) {
         h('figure', {}, previewFrames.gacha, h('figcaption', {}, 'ガチャ(見本)')),
         h('figure', {}, previewFrames.roulette, h('figcaption', {}, 'ルーレット(見本)'))),
       h('p', { class: 'hint' }, 'プレビューの赤い斜線はコメント欄の目安で、配信には表示されません。'),
-      h('p', { class: 'hint' }, 'PRISM LIVE に設定する URL(変更したら PRISM の URL を貼り直してください)'),
-      h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, '本番'), urlProd, h('button', { class: 'btn btn--small', onclick: () => copyText(urlProd.textContent) }, 'コピー')),
-      h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, 'テスト'), urlTest, h('button', { class: 'btn btn--small', onclick: () => copyText(urlTest.textContent) }, 'コピー')),
+      h('p', { class: 'hint' }, 'PRISM LIVE に設定する URL(変更したら PRISM の URL を貼り直してください)。表示用の合言葉は伏せて表示しています。コピーすると合言葉入りの URL になるので、人に見せたり配信に映したりしないでください'),
+      h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, '本番'), urlProd, h('button', { class: 'btn btn--small', onclick: () => copyText(urlValue(urlProd)) }, 'コピー')),
+      h('div', { class: 'copy-row' }, h('span', { class: 'tag' }, 'テスト'), urlTest, h('button', { class: 'btn btn--small', onclick: () => copyText(urlValue(urlTest)) }, 'コピー')),
       h('button', { class: 'btn btn--small', onclick: () => {
         layout = defaultLayout(layout.theme);
         build();
