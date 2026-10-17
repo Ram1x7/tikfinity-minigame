@@ -155,6 +155,27 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(和風テーマ): 画像を読み込み、ガチャ・ルーレットとも文字がはみ出さない ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('requestfailed', (r) => { if (r.url().includes('/images/wafu/')) errors.push(`画像の読み込み失敗: ${r.url()}`); });
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=1&theme=wafu&speed=4`);
+    await page.waitForFunction(() => { const r = document.querySelector('.roulette__result'); return r && getComputedStyle(r).opacity === '1'; }, null, { timeout: 20000 });
+    await page.waitForFunction(() => { const c = document.querySelector('.wafu-card'); return c && getComputedStyle(c).opacity === '1'; }, null, { timeout: 30000 });
+    const overflow = await page.evaluate(() => [...document.querySelectorAll('.wafu-card__label, .event__title, .event__sender')]
+      .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.className));
+    assert.deepEqual(overflow, [], `はみ出し: ${overflow}`);
+    const broken = await page.evaluate(() => [...document.querySelectorAll('img')].filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.src));
+    assert.deepEqual(broken, [], `表示できない画像: ${broken}`);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgba(0, 0, 0, 0)', '背景が透明');
+    assert.deepEqual(errors, []);
+    console.log('✔ 表示画面(和風): 画像・文字・背景の透過');
+    await page.close();
+  }
+
   // ---------- 管理画面: サンプル読み込み→保存で Worker に正しい形で送る ----------
   {
     const { page, errors } = await newPage({ width: 390, height: 844 });

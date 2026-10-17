@@ -13,12 +13,15 @@
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
 //   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。PRISM での大きさ・位置合わせ用
 //   &debug=1       画面の大きさ・倍率を左下に表示する
+//   &theme=wafu    和風デザイン(images/wafu/ の画像を使う)。省略時は従来のデザイン
 //   &soft=2        配信映像で文字がギザギザに崩れる時の対策(1〜5)。縮小前にごく軽くぼかして崩れを防ぐ
 // ============================================================
 import { getEnv } from './env.js';
 // Firebase(js/store.js)は demo=1 のときは読み込まない(接続できない環境でも見本を表示できるように)
 let store = null;
 import { playGacha } from './play-gacha.js';
+import { playGachaWafu } from './play-gacha-wafu.js';
+import { preloadWafu, fitText } from './wafu.js';
 import { playRoulette } from './play-roulette.js';
 import { rarityColor, sleep } from './visual.js';
 
@@ -30,6 +33,24 @@ const demo = params.get('demo') === '1';
 const debug = params.get('debug') === '1' || demo;
 // 配信用に大きく縮小される時、細い線が飛び飛びに拾われて文字が崩れるのを防ぐための、ごく軽いぼかし
 const soft = Math.min(5, Math.max(0, Number(params.get('soft')) || 0));
+const theme = params.get('theme') === 'wafu' ? 'wafu' : 'pop';
+
+// テーマの CSS・画像を読み込み終わってから再生を始める(読み込み途中の崩れた見た目を出さない)
+let themeReady = Promise.resolve();
+if (theme === 'wafu') {
+  document.body.classList.add('theme-wafu');
+  const loads = ['css/theme-wafu.css', 'https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@900&display=swap']
+    .map((href) => new Promise((resolve) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.onload = link.onerror = () => resolve();
+      document.head.append(link);
+    }));
+  const timeout = new Promise((resolve) => setTimeout(resolve, 8000));
+  themeReady = Promise.race([Promise.all([...loads, preloadWafu()]), timeout])
+    .then(() => (document.fonts ? Promise.race([document.fonts.ready, timeout]) : null));
+}
 
 const ROLL_GAP_MS = 500 / speed;      // 連続抽選の間隔
 const RESULT_HOLD_MS = 1600 / speed;  // 1回ごとの結果を見せる時間
@@ -108,7 +129,8 @@ function updatePending() {
 }
 
 // 結果は新しい順に最大3件まで並べ、それより前は「ほか N 件」にまとめる(画面からはみ出さないように)
-const MAX_CHIPS = 3;
+// 和風テーマは台紙が大きいので、コメント欄にかからないよう2件まで
+const MAX_CHIPS = theme === 'wafu' ? 2 : 3;
 let hiddenChips = 0;
 
 function addChip(roll) {
@@ -143,6 +165,11 @@ async function playItem(item) {
   senderEl.textContent = `${item.sender || '視聴者'} さん`;
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
+  if (theme === 'wafu') {
+    // タイトル帯・名前は1行に収まるまで文字を小さくする(収まらなければ末尾を … にする)
+    fitText(titleEl, 50, 28, { oneLine: true });
+    fitText(senderEl, 64, 38, { oneLine: true });
+  }
   resultsEl.replaceChildren();
   hiddenChips = 0;
   playEl.replaceChildren();
@@ -152,7 +179,8 @@ async function playItem(item) {
 
   for (let i = 0; i < rolls.length; i++) {
     countEl.textContent = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
-    if (item.mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed });
+    if (item.mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, skin: theme });
+    else if (theme === 'wafu') await playGachaWafu(playEl, rolls[i], { speed });
     else await playGacha(playEl, rolls[i], { speed });
     addChip(rolls[i]);
     await sleep(RESULT_HOLD_MS);
@@ -192,6 +220,10 @@ async function drain() {
 // ---------------- 見本の繰り返し再生(demo=1) ----------------
 const DEMO_POOL = ['釣り', '虫とり', '料理', 'ガーデニング', '鳥の観察', '貝がら集め', '家具づくり', '視聴者におまかせ']
   .map((label) => ({ label, weight: 1, rarity: 'N', color: '' }));
+const DEMO_POOL_MANY = [
+  ['釣り', 3], ['虫とり', 3], ['料理', 2], ['ガーデニング', 2], ['鳥の観察', 2], ['貝がら集め', 1],
+  ['家具づくり', 1], ['住民にあいさつ', 1], ['料理を1品作って住民にプレゼント', 1], ['走るの禁止', 1], ['お昼寝', 0.5], ['おまかせ', 0.5],
+].map(([label, weight]) => ({ label, weight, rarity: 'N', color: '' }));
 const DEMO_ITEMS = [
   {
     giftName: 'Rose', sender: 'みほん', repeatCount: 1, mode: 'roulette', title: '次にやること',
@@ -201,6 +233,17 @@ const DEMO_ITEMS = [
     giftName: 'Finger Heart', sender: 'ためしユーザー', repeatCount: 2, mode: 'gacha', title: '縛りガチャ',
     rolls: [{ label: '魚を3匹釣るまで他の行動禁止', rarity: 'R' }, { label: '視聴者のリクエストを1つ実行', rarity: 'SSR' }],
     pool: [],
+  },
+  {
+    // 長い文言・長い名前で文字が枠からはみ出さないかの確認用
+    giftName: 'Galaxy', sender: 'とても長いお名前のテストユーザーさま', repeatCount: 1, mode: 'gacha', title: 'ハートピア縛りガチャ',
+    rolls: [{ label: '次の15分はコメントで指示された場所へ移動し、到着したら住民全員にあいさつする', rarity: 'SR' }],
+    pool: [],
+  },
+  {
+    // 候補が多く確率もばらばらなルーレット
+    giftName: 'Doughnut', sender: 'たくさん候補', repeatCount: 1, mode: 'roulette', title: '行動ルーレット',
+    rolls: [{ label: '料理を1品作って住民にプレゼント', rarity: 'R' }], pool: DEMO_POOL_MANY,
   },
 ];
 
@@ -214,6 +257,7 @@ async function startDemo() {
 
 // ---------------- 起動 ----------------
 async function start() {
+  await themeReady;
   if (demo) return startDemo();
   store = await import('./store.js');
   const {

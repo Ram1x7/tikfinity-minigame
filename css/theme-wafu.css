@@ -1,0 +1,308 @@
+/*
+ * 和風テーマ(display.html?theme=wafu)。css/display.css の上に重ねて読み込む。
+ * 画像は装飾だけに使い、文字はすべて HTML。背景(ページ全体)は透明のまま。
+ *
+ * 画像素材(images/wafu/)の縁には元画像の背景色が薄く残っているため、
+ * ゲーム画面の上に直接置かず、半透明の藍色の台紙(.event)の上に置いている。
+ */
+.theme-wafu {
+  --indigo: #1b2547;
+  --indigo-deep: #121a36;
+  --washi: #f6eedb;
+  --washi-dark: #e9dcbc;
+  --gold: #d6ad52;
+  --gold-deep: #9c7426;
+  --vermilion: #c0392b;
+  --ink: #1b2547;
+  --shadow: 0 12px 0 rgba(10, 14, 32, 0.45);
+}
+/* 大きく出るタイトル・送信者名だけ明朝体。結果など読ませる文字は、圧縮でも崩れにくい太いゴシック */
+.theme-wafu .event__title,
+.theme-wafu .event__sender {
+  font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', serif;
+  font-weight: 900;
+}
+
+/* ---------------- 台紙 ---------------- */
+.theme-wafu .event {
+  left: 46px;
+  right: 46px;
+  top: var(--event-top, 130px);
+  padding: 24px 28px 30px;
+  border-radius: 40px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(214, 173, 82, 0.18), transparent 45%),
+    linear-gradient(180deg, rgba(27, 37, 71, 0.93), rgba(18, 26, 54, 0.93));
+  border: 6px solid var(--gold);
+  outline: 3px solid rgba(18, 26, 54, 0.9);
+  box-shadow: var(--shadow), inset 0 0 0 3px rgba(214, 173, 82, 0.35);
+}
+
+/* タイトル帯(画像)の上に、タイトルの文字を重ねる */
+.theme-wafu .event__title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 560px;
+  height: 165px;
+  margin: -8px auto 0;
+  padding: 0 104px 12px;
+  box-sizing: border-box;
+  background: url('../images/wafu/title-banner.png') center / 100% 100% no-repeat;
+  border: 0;
+  border-radius: 0;
+  color: #fff6dc;
+  font-size: 50px;
+  line-height: 1.1;
+  text-shadow: 3px 3px 0 var(--indigo-deep), -3px 3px 0 var(--indigo-deep), 3px -3px 0 var(--indigo-deep), -3px -3px 0 var(--indigo-deep);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.theme-wafu .event__title:empty { display: none; }
+
+.theme-wafu .event__sender {
+  margin-top: 4px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 64px;
+  color: #fffaf0;
+  text-shadow: 4px 4px 0 var(--indigo-deep), -4px 4px 0 var(--indigo-deep), 4px -4px 0 var(--indigo-deep), -4px -4px 0 var(--indigo-deep);
+}
+/* ヘッダーの並び順: タイトル帯 → 送信者 → ギフト */
+.theme-wafu .event__head { display: flex; flex-direction: column; align-items: center; }
+.theme-wafu .event__title { order: 1; }
+.theme-wafu .event__sender { order: 2; }
+.theme-wafu .event__gift { order: 3; }
+
+.theme-wafu .event__gift {
+  font-size: 44px;
+  color: var(--gold);
+}
+.theme-wafu .event__count {
+  margin-top: 4px;
+  font-size: 44px;
+  color: #ffd27a;
+  min-height: 54px;
+}
+.theme-wafu .event__play {
+  height: 760px;
+  margin-top: 0;
+}
+
+/* ---------------- 結果の一覧 ---------------- */
+.theme-wafu .chip {
+  background: var(--washi);
+  border: 5px solid var(--gold);
+  outline: 3px solid var(--indigo-deep);
+  color: var(--indigo);
+  font-size: 42px;
+}
+.theme-wafu .chip__rarity { color: var(--rarity, var(--gold-deep)); }
+.theme-wafu .chip--more { border-color: var(--gold); color: var(--indigo); }
+
+/* ---------------- 残り件数・TEST 表示 ---------------- */
+.theme-wafu #pending {
+  top: calc(var(--event-top, 130px) - 96px);
+  background: var(--indigo);
+  border: 5px solid var(--gold);
+  color: #fff6dc;
+  font-size: 42px;
+}
+.theme-wafu #env-badge {
+  background: var(--vermilion);
+  border: 4px solid var(--gold);
+}
+
+/* ---------------- ガチャ ---------------- */
+.wafu-gacha {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wafu-gacha__capsule {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+}
+.wafu-gacha__glow {
+  position: absolute;
+  width: 680px;
+  height: 680px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6dc 0%, var(--rarity, var(--gold)) 35%, transparent 68%);
+  opacity: 0;
+}
+
+/* 札: 画像(1000×1500)の窓は 左13.9%〜右86.2%、上23%〜下83.6% */
+.wafu-card {
+  position: absolute;
+  width: 494px;
+  height: 740px;
+  opacity: 0;
+}
+.wafu-card__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wafu-card__window {
+  position: absolute;
+  left: 13.2%;
+  right: 13.2%;
+  top: 22.4%;
+  bottom: 15.8%;
+  box-sizing: border-box;
+  padding: 18px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.7), transparent 60%),
+    linear-gradient(180deg, var(--washi), var(--washi-dark));
+}
+.wafu-card__rarity {
+  width: 210px;
+  height: auto;
+  flex: none;
+}
+.wafu-card__rarity--text {
+  width: auto;
+  padding: 6px 28px;
+  border-radius: 999px;
+  background: var(--indigo);
+  border: 4px solid var(--gold);
+  color: #fff6dc;
+  font-size: 48px;
+  font-weight: 900;
+}
+.wafu-card__label {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--indigo);
+  font-weight: 900;
+  line-height: 1.25;
+  word-break: break-word;
+  overflow: hidden;
+}
+.wafu-card__icon {
+  width: 92px;
+  height: 92px;
+  flex: none;
+}
+
+/* ---------------- ルーレット ---------------- */
+.roulette--wafu {
+  align-items: flex-start;
+}
+/* リング画像(800×800 を 760 に縮小)の穴の中心は (378, 376)、穴の直径は約 476〜496 */
+.wafu-wheel {
+  position: relative;
+  width: 760px;
+  height: 760px;
+  flex: none;
+}
+.wafu-wheel canvas {
+  position: absolute;
+  left: 130px;
+  top: 128px;
+  width: 496px;
+  height: 496px;
+  margin: 0;
+}
+.wafu-wheel__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.wafu-wheel__pointer {
+  position: absolute;
+  left: 330px;
+  top: 4px;
+  width: 96px;
+  height: 175px;
+  filter: drop-shadow(0 6px 0 rgba(10, 14, 32, 0.5));
+}
+
+/* 結果枠(画像 940×440)。内側の和紙部分に文字を置く。右下の扇の飾りは避ける */
+.wafu-result {
+  position: relative;
+  width: 760px;
+  height: 356px;
+}
+.roulette--wafu .roulette__result.wafu-result {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  opacity: 0;
+}
+.wafu-result__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wafu-result__rarity {
+  position: absolute;
+  left: 50%;
+  top: -50px;
+  width: 210px;
+  transform: translateX(-50%);
+}
+.wafu-result__rarity--text {
+  width: auto;
+  padding: 4px 26px;
+  border-radius: 999px;
+  background: var(--indigo);
+  border: 4px solid var(--gold);
+  color: #fff6dc;
+  font-size: 44px;
+  font-weight: 900;
+}
+.wafu-result__text {
+  position: absolute;
+  left: 9%;
+  right: 13%;
+  top: 22%;
+  bottom: 25%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--indigo);
+  font-weight: 900;
+  line-height: 1.2;
+  word-break: break-word;
+  overflow: hidden;
+}
+.wafu-result:has(.wafu-result__icon) .wafu-result__text { left: 23%; }
+.wafu-result__icon {
+  position: absolute;
+  left: 7%;
+  top: 50%;
+  width: 106px;
+  height: 106px;
+  transform: translateY(-58%);
+}
