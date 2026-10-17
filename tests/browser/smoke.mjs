@@ -155,24 +155,39 @@ try {
     await page.close();
   }
 
-  // ---------- 表示画面(和風テーマ): 画像を読み込み、ガチャ・ルーレットとも文字がはみ出さない ----------
+  // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------
   {
     const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    page.on('requestfailed', (r) => { if (r.url().includes('/images/wafu/')) errors.push(`画像の読み込み失敗: ${r.url()}`); });
+    page.on('requestfailed', (r) => { if (r.url().includes('/images/themes/')) errors.push(`読み込み失敗: ${r.url()}`); });
     await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
-    await page.goto(`${base}/display.html?demo=1&theme=wafu&speed=4`);
-    await page.waitForFunction(() => { const r = document.querySelector('.roulette__result'); return r && getComputedStyle(r).opacity === '1'; }, null, { timeout: 20000 });
-    await page.waitForFunction(() => { const c = document.querySelector('.wafu-card'); return c && getComputedStyle(c).opacity === '1'; }, null, { timeout: 30000 });
-    const overflow = await page.evaluate(() => [...document.querySelectorAll('.wafu-card__label, .event__title, .event__sender')]
+    await page.goto(`${base}/display.html?demo=1&theme=wafu&speed=4&safe=1300&g=150,100&r=150,100`);
+    const waitOpaque = (sel) => page.waitForFunction((s) => { const el = document.querySelector(s); return el && getComputedStyle(el).opacity === '1'; }, sel, { timeout: 40000 });
+    await waitOpaque('.roulette__result');
+    // 札の窓・リングの穴の位置を画像から測れている
+    const geo = await page.evaluate(() => ({
+      win: getComputedStyle(document.documentElement).getPropertyValue('--card-win-left'),
+      hole: getComputedStyle(document.documentElement).getPropertyValue('--ring-hole-d'),
+    }));
+    assert.match(geo.win, /%$/);
+    assert.ok(Number(geo.hole) > 0.5 && Number(geo.hole) < 0.75, `リングの穴: ${geo.hole}`);
+    await waitOpaque('.img-card');
+    await page.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 2, null, { timeout: 30000 });
+    // 結果2件のときでも台紙の下端が safe(1300) を越えない(画面は 0.5 倍なので 650px)
+    const bottom = await page.evaluate(() => document.getElementById('event').getBoundingClientRect().bottom);
+    assert.ok(bottom <= 650 + 1, `台紙の下端 ${bottom}`);
+    const overflow = await page.evaluate(() => [...document.querySelectorAll('.img-card__label, .event__title, .event__sender')]
       .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.className));
     assert.deepEqual(overflow, [], `はみ出し: ${overflow}`);
     const broken = await page.evaluate(() => [...document.querySelectorAll('img')].filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.src));
     assert.deepEqual(broken, [], `表示できない画像: ${broken}`);
     assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgba(0, 0, 0, 0)', '背景が透明');
+    // 候補12個のルーレットでは、針の下の候補名を大きく表示する
+    await page.waitForFunction(() => document.getElementById('ev-sender').textContent.includes('たくさん候補'), null, { timeout: 60000 });
+    await page.waitForFunction(() => { const t = document.querySelector('.roulette__ticker'); return t && !t.hidden && t.textContent; }, null, { timeout: 20000 });
     assert.deepEqual(errors, []);
-    console.log('✔ 表示画面(和風): 画像・文字・背景の透過');
+    console.log('✔ 表示画面(和風): 画像・透過・コメント欄よけ・候補が多いルーレット');
     await page.close();
   }
 
@@ -219,6 +234,19 @@ try {
     assert.equal(Object.keys(config.tables).length, 2);
     assert.deepEqual(errors, [], `管理画面のエラー: ${errors}`);
     console.log('✔ 管理画面: 編集内容を正しい形で Worker に保存できる');
+
+    // 表示の調整: スライダーで変えた値が URL とプレビューに入る
+    await page.click('#layout-card summary');
+    await page.waitForSelector('#layout-editor select');
+    await page.selectOption('#layout-editor select', 'wafu');
+    const range = page.locator('#layout-editor fieldset').first().locator('input[type=range]').first();
+    await range.evaluate((el) => { el.value = '300'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    const urls = await page.$$eval('#layout-editor code', (els) => els.map((e) => e.textContent));
+    assert.ok(urls[0].includes('env=prod') && urls[0].includes('theme=wafu') && urls[0].includes('g=300%2C100'), `URL: ${urls[0]}`);
+    await page.waitForFunction(() => document.querySelector('#layout-editor iframe')?.src.includes('demo=gacha'), null, { timeout: 5000 });
+    assert.ok((await page.textContent('#url-display')).includes('theme=wafu'), 'URL の案内にも反映');
+    await page.screenshot({ path: join(shots, 'admin-layout.png'), fullPage: true });
+    console.log('✔ 管理画面: 表示の調整で URL を作れる');
     await page.close();
   }
 

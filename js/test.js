@@ -7,6 +7,8 @@ import { getEnv, envLabel, urlWithEnv, pageUrl } from './env.js';
 import { isConfigured, watchConfig, watchRecentQueue, watchDisplayState } from './store.js';
 import { sendTestGift, clearEnv } from './api.js';
 import { h, toast, formatTime } from './dom.js';
+import { loadSavedLayout } from './layout-editor.js';
+import { layoutToParams } from './layout.js';
 
 const env = getEnv();
 const $ = (id) => document.getElementById(id);
@@ -123,7 +125,8 @@ $('t-preview').addEventListener('change', (e) => {
   const box = $('preview-box');
   box.hidden = !e.target.checked;
   box.replaceChildren(e.target.checked
-    ? h('iframe', { src: pageUrl('display.html', { env, preview: '1' }), title: '表示画面のプレビュー' })
+    // 管理画面の「表示の調整」で決めたデザイン・位置で表示する
+    ? h('iframe', { src: pageUrl('display.html', { env, preview: '1', ...layoutToParams(loadSavedLayout()) }), title: '表示画面のプレビュー' })
     : '');
 });
 

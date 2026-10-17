@@ -34,10 +34,15 @@
 
     <details class="card">
       <summary>URL の案内</summary>
-      <p class="hint">PRISM LIVE に追加する表示画面の URL</p>
+      <p class="hint">PRISM LIVE に追加する表示画面の URL(「表示の調整」の設定を含みます)</p>
       <div class="copy-row"><code id="url-display"></code><button class="btn btn--small" data-copy="url-display">コピー</button></div>
       <p class="hint">TikFinity の Webhook に設定する URL(「合言葉」の部分を Worker の WEBHOOK_KEY に置き換え)</p>
       <div class="copy-row"><code id="url-webhook"></code><button class="btn btn--small" data-copy="url-webhook">コピー</button></div>
+    </details>
+
+    <details class="card" id="layout-card">
+      <summary>表示の調整(デザイン・位置・大きさ)</summary>
+      <div id="layout-editor"></div>
     </details>
 
     <section class="card">

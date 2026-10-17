@@ -1,34 +1,35 @@
-// 和風テーマのガチャ演出:
-// 閉じた玉が落ちて揺れる → 光って開く → 札(card-frame)が現れ、窓の中にレア度と結果を表示する
+// 画像テーマのガチャ演出:
+// 閉じた玉が落ちて揺れる → 光って開く → 札(cardFrame)が現れ、窓の中にレア度と結果を表示する
+// 画像は theme.json で指定されたもの(js/theme.js)を使う
 import { rarityColor, sleep } from './visual.js';
-import { WAFU, img, rarityBadge, iconFor, fitText } from './wafu.js';
+import { img, rarityBadge, iconFor, fitText } from './theme.js';
 
-export async function playGachaWafu(mount, roll, { speed = 1 } = {}) {
+export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
   const color = rarityColor(roll.rarity, roll.color);
 
   const wrap = document.createElement('div');
-  wrap.className = 'wafu-gacha';
+  wrap.className = 'img-gacha';
   wrap.style.setProperty('--rarity', color);
 
   const glow = document.createElement('div');
-  glow.className = 'wafu-gacha__glow';
-  const closed = img(WAFU.capsuleClosed, 'wafu-gacha__capsule');
-  const open = img(WAFU.capsuleOpen, 'wafu-gacha__capsule');
+  glow.className = 'img-gacha__glow';
+  const closed = img(theme.images.capsuleClosed, 'img-gacha__capsule');
+  const open = img(theme.images.capsuleOpen || theme.images.capsuleClosed, 'img-gacha__capsule');
   open.style.opacity = '0';
 
   // 札: 画像の枠 + 窓の位置に和紙の下地と文字を重ねる
   const card = document.createElement('div');
-  card.className = 'wafu-card';
+  card.className = 'img-card';
   const windowEl = document.createElement('div');
-  windowEl.className = 'wafu-card__window';
+  windowEl.className = 'img-card__window';
   const label = document.createElement('div');
-  label.className = 'wafu-card__label';
+  label.className = 'img-card__label';
   label.textContent = roll.label;
-  windowEl.append(rarityBadge(roll.rarity, 'wafu-card__rarity'), label);
-  const icon = iconFor(roll.label);
-  if (icon) windowEl.append(img(icon, 'wafu-card__icon'));
-  card.append(windowEl, img(WAFU.cardFrame, 'wafu-card__frame'));
+  windowEl.append(rarityBadge(theme, roll.rarity, 'img-card__rarity'), label);
+  const icon = iconFor(theme, roll.label);
+  if (icon) windowEl.append(img(icon, 'img-card__icon'));
+  card.append(windowEl, img(theme.images.cardFrame, 'img-card__frame'));
 
   wrap.append(glow, closed, open, card);
   mount.replaceChildren(wrap);

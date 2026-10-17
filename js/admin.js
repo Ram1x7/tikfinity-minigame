@@ -4,11 +4,12 @@
 // 設定は Firebase から読み、保存は Worker 経由で行う(ブラウザから直接は書き込まない)。
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
-import { getEnv, envLabel, urlWithEnv, pageUrl } from './env.js';
+import { getEnv, envLabel, urlWithEnv } from './env.js';
 import { isConfigured, loadConfig, watchRecentLog, watchConnection } from './store.js';
 import { getConnection, saveConnection, saveConfig, copyConfig, diagnose } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
+import { initLayoutEditor, loadSavedLayout, displayUrl } from './layout-editor.js';
 import {
   sanitizeConfig, probabilities, normalizeGift, DEFAULT_SETTINGS, RARITIES, LIMITS,
 } from '../shared/core.js';
@@ -66,9 +67,11 @@ function renderHeader() {
   document.title = `管理画面(${envLabel(env)})`;
 }
 
+let currentLayout = loadSavedLayout();
+
 function renderUrls() {
   const { workerUrl } = getConnection();
-  $('url-display').textContent = pageUrl('display.html', { env });
+  $('url-display').textContent = displayUrl(env, currentLayout);
   $('url-webhook').textContent = workerUrl
     ? `${workerUrl}/webhook?env=${env}&k=合言葉`
     : '(先に「接続設定」で Worker の URL を入力してください)';
@@ -312,6 +315,12 @@ function renderLog(entries) {
 
 // ---------------- 起動 ----------------
 async function start() {
+  // 「表示の調整」は開いたときに組み立てる(プレビューの読み込みを必要な時だけにする)
+  $('layout-card').addEventListener('toggle', () => {
+    if ($('layout-card').open && !$('layout-editor').hasChildNodes()) {
+      initLayoutEditor($('layout-editor'), env, (layout) => { currentLayout = layout; renderUrls(); });
+    }
+  });
   renderHeader();
   renderConnection();
   renderUrls();

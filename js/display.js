@@ -7,56 +7,47 @@
 //
 // URL パラメータ
 //   ?env=prod      本番のキューを再生(省略時はテスト)
+//   &theme=wafu    画像テーマ(images/themes/<名前>/)。省略時は従来のデザイン
+//   &g=110,100     ガチャの台紙の上端(px)・大きさ(%)     ┐ 管理画面の「表示の調整」で作る
+//   &r=110,100     ルーレットの台紙の上端(px)・大きさ(%) │ (js/layout.js)
+//   &safe=1400     これより下に台紙を出さない(コメント欄よけ)┘
 //   &skip=1        起動時に溜まっている未再生分を飛ばして最新から始める
 //   &speed=2       演出の速さ(テスト用)
-//   &top=300      カードの上端の位置(1080×1920 基準のpx)。ゲーム画面の見せたい所を避けて調整する
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
-//   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。PRISM での大きさ・位置合わせ用
+//   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。gacha / roulette で片方だけ
+//   &guide=1       コメント欄の目安と safe の線を表示する(調整用。配信には使わない)
 //   &debug=1       画面の大きさ・倍率を左下に表示する
-//   &theme=wafu    和風デザイン(images/wafu/ の画像を使う)。省略時は従来のデザイン
 //   &soft=2        配信映像で文字がギザギザに崩れる時の対策(1〜5)。縮小前にごく軽くぼかして崩れを防ぐ
 // ============================================================
 import { getEnv } from './env.js';
-// Firebase(js/store.js)は demo=1 のときは読み込まない(接続できない環境でも見本を表示できるように)
-let store = null;
 import { playGacha } from './play-gacha.js';
-import { playGachaWafu } from './play-gacha-wafu.js';
-import { preloadWafu, fitText } from './wafu.js';
+import { playGachaImage } from './play-gacha-image.js';
 import { playRoulette } from './play-roulette.js';
+import { loadTheme, fitText } from './theme.js';
+import { parseLayout, fitPanel } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
+
+// Firebase(js/store.js)は demo のときは読み込まない(接続できない環境でも見本を表示できるように)
+let store = null;
 
 const params = new URLSearchParams(location.search);
 const env = getEnv();
 const speed = Math.min(5, Math.max(0.2, Number(params.get('speed')) || 1));
 const preview = params.get('preview') === '1';
-const demo = params.get('demo') === '1';
-const debug = params.get('debug') === '1' || demo;
+const demoParam = params.get('demo');
+const demo = ['1', 'gacha', 'roulette'].includes(demoParam) ? demoParam : null;
+const guide = params.get('guide') === '1';
+const debug = params.get('debug') === '1' || (demo && !guide);
 // 配信用に大きく縮小される時、細い線が飛び飛びに拾われて文字が崩れるのを防ぐための、ごく軽いぼかし
 const soft = Math.min(5, Math.max(0, Number(params.get('soft')) || 0));
-const theme = params.get('theme') === 'wafu' ? 'wafu' : 'pop';
-
-// テーマの CSS・画像を読み込み終わってから再生を始める(読み込み途中の崩れた見た目を出さない)
-let themeReady = Promise.resolve();
-if (theme === 'wafu') {
-  document.body.classList.add('theme-wafu');
-  const loads = ['css/theme-wafu.css', 'https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@900&display=swap']
-    .map((href) => new Promise((resolve) => {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = href;
-      link.onload = link.onerror = () => resolve();
-      document.head.append(link);
-    }));
-  const timeout = new Promise((resolve) => setTimeout(resolve, 8000));
-  themeReady = Promise.race([Promise.all([...loads, preloadWafu()]), timeout])
-    .then(() => (document.fonts ? Promise.race([document.fonts.ready, timeout]) : null));
-}
+const layout = parseLayout(params);
 
 const ROLL_GAP_MS = 500 / speed;      // 連続抽選の間隔
 const RESULT_HOLD_MS = 1600 / speed;  // 1回ごとの結果を見せる時間
 const TAIL_MS = 2600 / speed;         // 全部終わった後に表示しておく時間
 
 const stage = document.getElementById('stage');
+const slotEl = document.getElementById('event-slot');
 const eventEl = document.getElementById('event');
 const senderEl = document.getElementById('ev-sender');
 const giftEl = document.getElementById('ev-gift');
@@ -66,37 +57,56 @@ const playEl = document.getElementById('ev-play');
 const resultsEl = document.getElementById('ev-results');
 const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
+const debugEl = document.getElementById('debug');
 
-// ---------------- キャンバスの拡縮 ----------------
+function notice(text) {
+  noticeEl.hidden = !text;
+  noticeEl.textContent = text || '';
+}
+
+// ---------------- テーマ ----------------
+// 画像テーマの CSS・画像・フォントを読み込み終わってから再生を始める(崩れた見た目を出さない)
+let theme = null;
+const themeReady = layout.theme
+  ? loadTheme(layout.theme)
+    .then((t) => { theme = t; })
+    .catch((err) => { console.error(err); notice(`テーマを読み込めません: ${err.message}`); })
+  : Promise.resolve();
+
+// ---------------- 画面全体の拡縮 ----------------
 // zoom は文字を目的の大きさで描き直すので、縮小・拡大してもぼやけない。
 // zoom が使えない古いブラウザだけ transform で代用する。
 const useZoom = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('zoom', '0.5');
-const debugEl = document.getElementById('debug');
+let lastFit = null; // 直近の台紙の倍率(debug 表示用)
 
-function fit() {
+function renderDebug() {
+  if (!debug) return;
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const scale = Math.min(w / 1080, h / 1920);
+  const scale = window.__stageScale;
+  const dpr = window.devicePixelRatio || 1;
+  const lines = [
+    `表示領域 ${w}×${h}  倍率 ${scale.toFixed(2)}  DPR ${dpr}`,
+    `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px  soft ${soft}`,
+  ];
+  if (lastFit) {
+    lines.push(`台紙 ${Math.round(lastFit.zoom * 100)}%  下端 ${lastFit.bottom}px${lastFit.shrunk ? '(コメント欄よけで縮小)' : ''}`);
+  }
+  if (w > h) lines.push('⚠ 横長です。Web ソースを縦長(例 1080×1920)にしてください');
+  else if (scale * dpr < 0.9) lines.push('⚠ 小さく描画されています。Web ソースの幅・高さを大きくしてください');
+  debugEl.hidden = false;
+  debugEl.textContent = lines.join('\n');
+}
+
+function fit() {
+  const scale = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
   window.__stageScale = scale;
-  if (useZoom) {
-    stage.style.zoom = String(scale);
-  } else {
-    stage.style.transform = `scale(${scale})`;
-  }
+  if (useZoom) stage.style.zoom = String(scale);
+  else stage.style.transform = `scale(${scale})`;
   // soft 1 段階 ≒ 実際の画素で約1px 分のぼかし(倍率・画素密度に関係なく同じ効き方にする)
-  const dprNow = window.devicePixelRatio || 1;
-  stage.style.filter = soft > 0 ? `blur(${(soft / (scale * dprNow)).toFixed(3)}px)` : '';
-  if (debug) {
-    debugEl.hidden = false;
-    const dpr = window.devicePixelRatio || 1;
-    const lines = [
-      `表示領域 ${w}×${h}  倍率 ${scale.toFixed(2)}  DPR ${dpr}`,
-      `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px  soft ${soft}`,
-    ];
-    if (w > h) lines.push('⚠ 横長です。Web ソースを縦長(例 1080×1920)にしてください');
-    else if (scale * dpr < 0.9) lines.push('⚠ 小さく描画されています。Web ソースの幅・高さを大きくしてください');
-    debugEl.textContent = lines.join('\n');
-  }
+  const dpr = window.devicePixelRatio || 1;
+  stage.style.filter = soft > 0 ? `blur(${(soft / (scale * dpr)).toFixed(3)}px)` : '';
+  renderDebug();
 }
 window.addEventListener('resize', fit);
 fit();
@@ -107,14 +117,41 @@ if (env === 'test' || demo) {
   if (demo) badge.textContent = 'DEMO';
 }
 
-const top = Number(params.get('top'));
-if (Number.isFinite(top) && params.has('top')) {
-  stage.style.setProperty('--event-top', `${Math.min(1700, Math.max(90, top))}px`);
+// 調整用: コメント欄の目安と、台紙を出してよい下端(safe)の線
+if (guide) {
+  const g = document.getElementById('guide');
+  g.hidden = false;
+  g.style.setProperty('--safe', `${layout.safeBottom}px`);
 }
 
-function notice(text) {
-  noticeEl.hidden = !text;
-  noticeEl.textContent = text || '';
+// ---------------- 台紙の大きさ・位置 ----------------
+// 結果の欄は最大件数ぶんの高さを先に確保しておき、台紙の高さが再生中に変わらないようにする。
+// その最大の高さで safe の線を越えないよう、台紙の倍率を決める。
+const maxChips = () => 2;
+
+function applyPanelLayout(mode) {
+  const m = layout[mode] || layout.gacha;
+  // 結果の欄に最大件数ぶんの見本を入れて高さを測る
+  resultsEl.style.minHeight = '';
+  const samples = Array.from({ length: maxChips() }, () => {
+    const li = document.createElement('li');
+    li.className = 'chip';
+    li.textContent = 'R 見本の結果';
+    return li;
+  });
+  resultsEl.replaceChildren(...samples);
+  eventEl.style.zoom = '';
+  eventEl.style.transform = '';
+  const reserved = resultsEl.offsetHeight;
+  const natural = eventEl.offsetHeight;
+  resultsEl.replaceChildren();
+  resultsEl.style.minHeight = `${reserved}px`;
+
+  lastFit = fitPanel(m, natural, layout.safeBottom);
+  slotEl.style.top = `${m.top}px`;
+  if (useZoom) eventEl.style.zoom = String(lastFit.zoom);
+  else eventEl.style.setProperty('--panel-scale', String(lastFit.zoom));
+  renderDebug();
 }
 
 // ---------------- 再生 ----------------
@@ -128,10 +165,13 @@ function updatePending() {
   pendingEl.textContent = `あと ${rest} 件`;
 }
 
-// 結果は新しい順に最大3件まで並べ、それより前は「ほか N 件」にまとめる(画面からはみ出さないように)
-// 和風テーマは台紙が大きいので、コメント欄にかからないよう2件まで
-const MAX_CHIPS = theme === 'wafu' ? 2 : 3;
+// 結果は1件1行で新しいものを最大2件まで並べる。それより前は件数だけ表示する
 let hiddenChips = 0;
+let countBase = '';
+
+function renderCount() {
+  countEl.textContent = hiddenChips > 0 ? `${countBase}  (前の結果 ほか${hiddenChips}件)` : countBase;
+}
 
 function addChip(roll) {
   const li = document.createElement('li');
@@ -141,53 +181,51 @@ function addChip(roll) {
   r.className = 'chip__rarity';
   r.textContent = roll.rarity || 'N';
   li.append(r, document.createTextNode(roll.label));
-
-  const chips = [...resultsEl.querySelectorAll('.chip:not(.chip--more)')];
-  if (chips.length >= MAX_CHIPS) {
+  const chips = resultsEl.querySelectorAll('.chip');
+  if (chips.length >= maxChips()) {
     chips[0].remove();
     hiddenChips++;
   }
-  resultsEl.querySelector('.chip--more')?.remove();
-  if (hiddenChips > 0) {
-    const more = document.createElement('li');
-    more.className = 'chip chip--more';
-    more.textContent = `ほか ${hiddenChips} 件`;
-    resultsEl.prepend(more);
-  }
   resultsEl.append(li);
+  renderCount();
 }
 
 async function playItem(item) {
   const rolls = Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {});
   const pool = Array.isArray(item.pool) ? item.pool : Object.values(item.pool || {});
   if (rolls.length === 0) return;
+  const mode = item.mode === 'roulette' ? 'roulette' : 'gacha';
 
+  eventEl.dataset.mode = mode;
   senderEl.textContent = `${item.sender || '視聴者'} さん`;
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
-  if (theme === 'wafu') {
+  hiddenChips = 0;
+  countBase = rolls.length > 1 ? `1 / ${rolls.length} 回目` : '';
+  renderCount();
+  playEl.replaceChildren();
+  if (theme) {
     // タイトル帯・名前は1行に収まるまで文字を小さくする(収まらなければ末尾を … にする)
     fitText(titleEl, 50, 28, { oneLine: true });
     fitText(senderEl, 64, 38, { oneLine: true });
   }
-  resultsEl.replaceChildren();
-  hiddenChips = 0;
-  playEl.replaceChildren();
-  countEl.textContent = '';
+  applyPanelLayout(mode);
   eventEl.classList.add('show');
   await sleep(350);
 
   for (let i = 0; i < rolls.length; i++) {
-    countEl.textContent = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
-    if (item.mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, skin: theme });
-    else if (theme === 'wafu') await playGachaWafu(playEl, rolls[i], { speed });
+    countBase = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
+    renderCount();
+    if (mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, theme });
+    else if (theme) await playGachaImage(playEl, rolls[i], { speed, theme });
     else await playGacha(playEl, rolls[i], { speed });
     addChip(rolls[i]);
     await sleep(RESULT_HOLD_MS);
     if (i < rolls.length - 1) await sleep(ROLL_GAP_MS);
   }
 
-  countEl.textContent = rolls.length > 1 ? `結果 ${rolls.length} 件` : '';
+  countBase = rolls.length > 1 ? `結果 ${rolls.length} 件` : '';
+  renderCount();
   await sleep(TAIL_MS + Math.max(0, rolls.length - 1) * 400);
 }
 
@@ -217,7 +255,7 @@ async function drain() {
   playing = false;
 }
 
-// ---------------- 見本の繰り返し再生(demo=1) ----------------
+// ---------------- 見本の繰り返し再生(demo) ----------------
 const DEMO_POOL = ['釣り', '虫とり', '料理', 'ガーデニング', '鳥の観察', '貝がら集め', '家具づくり', '視聴者におまかせ']
   .map((label) => ({ label, weight: 1, rarity: 'N', color: '' }));
 const DEMO_POOL_MANY = [
@@ -248,8 +286,9 @@ const DEMO_ITEMS = [
 ];
 
 async function startDemo() {
+  const items = demo === '1' ? DEMO_ITEMS : DEMO_ITEMS.filter((it) => it.mode === demo);
   for (let i = 0; ; i++) {
-    queue.push({ key: `demo${i}`, item: DEMO_ITEMS[i % DEMO_ITEMS.length] });
+    queue.push({ key: `demo${i}`, item: items[i % items.length] });
     await drain();
     await sleep(1500);
   }

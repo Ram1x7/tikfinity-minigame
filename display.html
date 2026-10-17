@@ -15,18 +15,27 @@
     <div id="env-badge" hidden>TEST</div>
     <div id="notice" hidden></div>
 
-    <section id="event" class="event" aria-live="polite">
-      <header class="event__head">
-        <div class="event__sender" id="ev-sender"></div>
-        <div class="event__gift" id="ev-gift"></div>
-        <div class="event__title" id="ev-title"></div>
-      </header>
-      <div class="event__count" id="ev-count"></div>
-      <div class="event__play" id="ev-play"></div>
-      <ol class="event__results" id="ev-results"></ol>
-    </section>
+    <!-- 調整用(guide=1): コメント欄の目安と、台紙を出してよい下端の線 -->
+    <div id="guide" hidden>
+      <div class="guide__comments">TikTok のコメント欄の目安</div>
+      <div class="guide__safe">この線より下には台紙を出さない</div>
+    </div>
 
-    <div id="pending" hidden></div>
+    <!-- 台紙の位置(上端)は event-slot、大きさは event の倍率で決める(js/layout.js) -->
+    <div id="event-slot">
+      <div id="pending" hidden></div>
+      <section id="event" class="event" aria-live="polite">
+        <header class="event__head">
+          <div class="event__sender" id="ev-sender"></div>
+          <div class="event__gift" id="ev-gift"></div>
+          <div class="event__title" id="ev-title"></div>
+        </header>
+        <div class="event__count" id="ev-count"></div>
+        <div class="event__play" id="ev-play"></div>
+        <ol class="event__results" id="ev-results"></ol>
+      </section>
+    </div>
+
     <div id="debug" hidden></div>
   </div>
 

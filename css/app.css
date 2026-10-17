@@ -252,3 +252,23 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.is-error { background: var(--danger); }
+
+/* ---------------- 表示の調整 ---------------- */
+.layout-groups { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0; }
+@media (min-width: 720px) { .layout-groups { grid-template-columns: 1fr 1fr 1fr; } }
+.layout-group { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 4px; margin: 0; }
+.layout-group legend { font-weight: 700; padding: 0 6px; color: var(--text); }
+.slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.slider__label { grid-column: 1 / -1; }
+.slider input[type=range] { width: 100%; padding: 0; accent-color: var(--accent); }
+.slider output { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 700; }
+.layout-previews { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+.layout-previews figure { margin: 0; text-align: center; }
+.layout-previews iframe {
+  width: 216px;
+  height: 384px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #8fc0ea 0 42%, #5f9a62 42% 100%);
+}
+.layout-previews figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
