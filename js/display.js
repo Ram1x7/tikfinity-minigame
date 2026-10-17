@@ -11,12 +11,12 @@
 //   &speed=2       演出の速さ(テスト用)
 //   &top=300      カードの上端の位置(1080×1920 基準のpx)。ゲーム画面の見せたい所を避けて調整する
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
+//   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。PRISM での大きさ・位置合わせ用
+//   &debug=1       画面の大きさ・倍率を左下に表示する
 // ============================================================
 import { getEnv } from './env.js';
-import {
-  isConfigured, watchConfig, watchConnection, getCursor, setCursor,
-  latestQueueKey, watchQueueAfter,
-} from './store.js';
+// Firebase(js/store.js)は demo=1 のときは読み込まない(接続できない環境でも見本を表示できるように)
+let store = null;
 import { playGacha } from './play-gacha.js';
 import { playRoulette } from './play-roulette.js';
 import { rarityColor, sleep } from './visual.js';
@@ -25,6 +25,8 @@ const params = new URLSearchParams(location.search);
 const env = getEnv();
 const speed = Math.min(5, Math.max(0.2, Number(params.get('speed')) || 1));
 const preview = params.get('preview') === '1';
+const demo = params.get('demo') === '1';
+const debug = params.get('debug') === '1' || demo;
 
 const ROLL_GAP_MS = 500 / speed;      // 連続抽選の間隔
 const RESULT_HOLD_MS = 1600 / speed;  // 1回ごとの結果を見せる時間
@@ -42,14 +44,41 @@ const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
 
 // ---------------- キャンバスの拡縮 ----------------
+// zoom は文字を目的の大きさで描き直すので、縮小・拡大してもぼやけない。
+// zoom が使えない古いブラウザだけ transform で代用する。
+const useZoom = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('zoom', '0.5');
+const debugEl = document.getElementById('debug');
+
 function fit() {
-  const scale = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
-  stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const scale = Math.min(w / 1080, h / 1920);
+  window.__stageScale = scale;
+  if (useZoom) {
+    stage.style.zoom = String(scale);
+  } else {
+    stage.style.transform = `scale(${scale})`;
+  }
+  if (debug) {
+    debugEl.hidden = false;
+    const dpr = window.devicePixelRatio || 1;
+    const lines = [
+      `表示領域 ${w}×${h}  倍率 ${scale.toFixed(2)}  DPR ${dpr}`,
+      `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px`,
+    ];
+    if (w > h) lines.push('⚠ 横長です。Web ソースを縦長(例 1080×1920)にしてください');
+    else if (scale * dpr < 0.9) lines.push('⚠ 小さく描画されています。Web ソースの幅・高さを大きくしてください');
+    debugEl.textContent = lines.join('\n');
+  }
 }
 window.addEventListener('resize', fit);
 fit();
 
-if (env === 'test') document.getElementById('env-badge').hidden = false;
+if (env === 'test' || demo) {
+  const badge = document.getElementById('env-badge');
+  badge.hidden = false;
+  if (demo) badge.textContent = 'DEMO';
+}
 
 const top = Number(params.get('top'));
 if (Number.isFinite(top) && params.has('top')) {
@@ -128,16 +157,46 @@ async function drain() {
       console.error('再生に失敗しました', err);
     }
     // 失敗しても先に進む(同じ項目で止まり続けないように)
-    if (!preview) {
-      try { await setCursor(env, key); } catch (err) { console.error('再生位置の保存に失敗', err); }
+    if (!preview && !demo) {
+      try { await store.setCursor(env, key); } catch (err) { console.error('再生位置の保存に失敗', err); }
     }
   }
   eventEl.classList.remove('show');
   playing = false;
 }
 
+// ---------------- 見本の繰り返し再生(demo=1) ----------------
+const DEMO_POOL = ['釣り', '虫とり', '料理', 'ガーデニング', '鳥の観察', '貝がら集め', '家具づくり', '視聴者におまかせ']
+  .map((label) => ({ label, weight: 1, rarity: 'N', color: '' }));
+const DEMO_ITEMS = [
+  {
+    giftName: 'Rose', sender: 'みほん', repeatCount: 1, mode: 'roulette', title: '次にやること',
+    rolls: [{ label: 'ガーデニング', rarity: 'N' }], pool: DEMO_POOL,
+  },
+  {
+    giftName: 'Finger Heart', sender: 'ためしユーザー', repeatCount: 2, mode: 'gacha', title: '縛りガチャ',
+    rolls: [{ label: '魚を3匹釣るまで他の行動禁止', rarity: 'R' }, { label: '視聴者のリクエストを1つ実行', rarity: 'SSR' }],
+    pool: [],
+  },
+];
+
+async function startDemo() {
+  for (let i = 0; ; i++) {
+    queue.push({ key: `demo${i}`, item: DEMO_ITEMS[i % DEMO_ITEMS.length] });
+    await drain();
+    await sleep(1500);
+  }
+}
+
 // ---------------- 起動 ----------------
 async function start() {
+  if (demo) return startDemo();
+  store = await import('./store.js');
+  const {
+    isConfigured, watchConfig, watchConnection, getCursor, setCursor,
+    latestQueueKey, watchQueueAfter,
+  } = store;
+
   if (!isConfigured()) {
     notice('js/config.js に Firebase の接続情報を設定してください');
     return;

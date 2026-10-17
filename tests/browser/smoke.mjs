@@ -127,6 +127,34 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面: demo/debug で大きさの確認ができ、zoom で拡縮される ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 360, height: 640 }, deviceScaleFactor: 3 });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=1&speed=3`);
+    await page.waitForSelector('.roulette canvas');
+    await page.waitForTimeout(600);
+    const info = await page.evaluate(() => ({
+      zoom: document.getElementById('stage').style.zoom,
+      canvas: document.querySelector('.roulette canvas').width,
+      debug: document.getElementById('debug').textContent,
+      rect: document.getElementById('stage').getBoundingClientRect().toJSON(),
+    }));
+    assert.equal(Number(info.zoom).toFixed(3), (360 / 1080).toFixed(3), 'zoom で縮小している');
+    assert.equal(info.canvas, Math.round(760 * (360 / 1080) * 3), 'canvas は実際の画素数で描く');
+    assert.ok(Math.abs(info.rect.width - 360) < 1 && Math.abs(info.rect.height - 640) < 1, `画面いっぱい: ${JSON.stringify(info.rect)}`);
+    await page.screenshot({ path: join(shots, 'display-demo-phone.png') });
+    await page.setViewportSize({ width: 960, height: 540 });
+    await page.waitForTimeout(200);
+    const landscape = await page.evaluate(() => document.getElementById('debug').textContent);
+    assert.match(landscape, /横長/);
+    assert.deepEqual(errors, []);
+    console.log('✔ 表示画面: demo/debug 表示、zoom による拡縮、canvas の解像度');
+    await page.close();
+  }
+
   // ---------- 管理画面: サンプル読み込み→保存で Worker に正しい形で送る ----------
   {
     const { page, errors } = await newPage({ width: 390, height: 844 });

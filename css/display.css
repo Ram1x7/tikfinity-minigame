@@ -24,15 +24,37 @@ html, body {
 body {
   font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', sans-serif;
   color: var(--ink);
+  /* 1080×1920 の画面を中央に置く */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * 1080×1920 基準で作った画面。js/display.js が zoom で実際の大きさに合わせる。
+ * transform: scale で縮小すると iPad(WebKit)では一度描いた絵を縮めるため文字がぼやけるので、
+ * 文字を目的の大きさで描き直してくれる zoom を使う。
+ */
 #stage {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+  position: relative;
+  flex: none;
   width: 1080px;
   height: 1920px;
-  transform-origin: center center;
+}
+
+#debug {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  padding: 12px 20px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: pre;
 }
 
 #env-badge {

@@ -2,7 +2,20 @@
 // 結果は Worker が決めたものを受け取るだけで、ここでは抽選しない。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
 
-const SIZE = 1000; // canvas の内部解像度
+const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
+const CSS_SIZE = 760; // 1080×1920 基準での表示サイズ(css/display.css と合わせる)
+
+/** 画面の倍率と端末の画素密度に合わせて、ぼやけない画素数にする */
+function setupCanvas(canvas) {
+  const scale = window.__stageScale || 1;
+  const dpr = window.devicePixelRatio || 1;
+  const px = Math.max(300, Math.min(2400, Math.round(CSS_SIZE * scale * dpr)));
+  canvas.width = px;
+  canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(px / SIZE, 0, 0, px / SIZE, 0, 0);
+  return ctx;
+}
 
 function slicesOf(pool) {
   const total = pool.reduce((s, it) => s + Math.max(0, Number(it.weight) || 0), 0) || 1;
@@ -75,8 +88,6 @@ export async function playRoulette(mount, roll, pool, { speed = 1 } = {}) {
   wrap.className = 'roulette';
   wrap.style.setProperty('--rarity', rarityColor(roll.rarity, roll.color));
   const canvas = document.createElement('canvas');
-  canvas.width = SIZE;
-  canvas.height = SIZE;
   const pointer = document.createElement('div');
   pointer.className = 'roulette__pointer';
   const result = document.createElement('div');
@@ -85,7 +96,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1 } = {}) {
   wrap.append(canvas, pointer, result);
   mount.replaceChildren(wrap);
 
-  const ctx = canvas.getContext('2d');
+  const ctx = setupCanvas(canvas);
   // 針は真上(-90度)。当選した扇形の内側のどこかが真上に来る角度で止める。
   const s = slices[target];
   const inner = s.start + s.sweep * (0.2 + Math.random() * 0.6);
