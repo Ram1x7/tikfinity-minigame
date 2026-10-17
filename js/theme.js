@@ -146,6 +146,9 @@ export async function loadTheme(name) {
     return im && im.naturalHeight ? `${im.naturalWidth} / ${im.naturalHeight}` : fallback;
   };
   css.setProperty('--card-aspect', ratio(theme.images.cardFrame, '2 / 3'));
+  // タイトル帯は幅÷高さの数値(高さの計算に使う)
+  const banner = imgs.get(theme.images.titleBanner);
+  css.setProperty('--title-aspect', banner && banner.naturalHeight ? String(banner.naturalWidth / banner.naturalHeight) : '3.39');
   css.setProperty('--result-aspect', ratio(theme.images.resultFrame, '940 / 440'));
 
   document.body.classList.add('theme-image', `theme-${name}`);

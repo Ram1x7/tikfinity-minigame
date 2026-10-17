@@ -66,7 +66,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   // 札が現れる。表示してから文字の大きさを窓に合わせる
   card.style.visibility = 'hidden';
   card.style.opacity = '1';
-  fitText(label, 54, 28);
+  fitText(label, 62, 28);
   card.style.visibility = '';
   card.style.opacity = '';
   await card.animate(

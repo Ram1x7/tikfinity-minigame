@@ -49,8 +49,9 @@
 
 /* タイトル帯(画像)の上に、タイトルの文字を重ねる */
 .theme-wafu .event__title {
-  --banner-w: 560px;
-  --banner-h: 165px;
+  /* 高さはタイトル帯画像の縦横比から決める(画像を差し替えても歪まない) */
+  --banner-w: 620px;
+  --banner-h: calc(var(--banner-w) / var(--title-aspect, 3.39));
   display: block;
   width: var(--banner-w);
   height: var(--banner-h);
@@ -133,8 +134,8 @@
 }
 .img-gacha__capsule {
   position: absolute;
-  width: 420px;
-  height: 420px;
+  width: 500px;
+  height: 500px;
   object-fit: contain;
 }
 .img-gacha__glow {
@@ -177,7 +178,7 @@
     linear-gradient(180deg, var(--washi), var(--washi-dark));
 }
 .img-card__rarity {
-  width: 210px;
+  width: 250px;
   height: auto;
   flex: none;
 }

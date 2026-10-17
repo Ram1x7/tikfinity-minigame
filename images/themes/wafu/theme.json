@@ -20,23 +20,81 @@
     }
   },
   "icons": [
-    { "file": "icon-fishing.png", "words": ["釣", "魚"] },
-    { "file": "icon-bugs.png", "words": ["虫"] },
-    { "file": "icon-cooking.png", "words": ["料理", "食", "作って"] },
-    { "file": "icon-birds.png", "words": ["鳥"] },
-    { "file": "icon-gathering.png", "words": ["花", "採集", "ガーデニング", "植", "貝"] }
+    {
+      "file": "icon-fishing.png",
+      "words": [
+        "釣",
+        "魚"
+      ]
+    },
+    {
+      "file": "icon-bugs.png",
+      "words": [
+        "虫"
+      ]
+    },
+    {
+      "file": "icon-cooking.png",
+      "words": [
+        "料理",
+        "食",
+        "作って"
+      ]
+    },
+    {
+      "file": "icon-birds.png",
+      "words": [
+        "鳥"
+      ]
+    },
+    {
+      "file": "icon-gathering.png",
+      "words": [
+        "花",
+        "採集",
+        "ガーデニング",
+        "植",
+        "貝"
+      ]
+    }
   ],
   "geometry": {
     "cardWindow": "auto",
     "ringHole": "auto",
-    "resultText": { "left": 9, "top": 22, "right": 13, "bottom": 25 },
-    "resultTextWithIcon": { "left": 23 },
-    "resultIcon": { "left": 7, "size": 14 },
-    "titleText": { "left": 18.5, "right": 18.5, "bottom": 7 },
-    "pointer": { "width": 12.6, "top": 0.5 }
+    "resultText": {
+      "left": 9,
+      "top": 15,
+      "right": 9,
+      "bottom": 15
+    },
+    "resultTextWithIcon": {
+      "left": 21
+    },
+    "resultIcon": {
+      "left": 6,
+      "size": 13
+    },
+    "titleText": {
+      "left": 11,
+      "right": 11,
+      "bottom": 0
+    },
+    "pointer": {
+      "width": 12.6,
+      "top": 0.5
+    }
   },
   "roulette": {
-    "colors": ["#f4ead2", "#24386b", "#d9a83a", "#b8402e", "#f2b9c8", "#3d6b55", "#e8d7b0", "#5a3f7a"],
+    "colors": [
+      "#f4ead2",
+      "#24386b",
+      "#d9a83a",
+      "#b8402e",
+      "#f2b9c8",
+      "#3d6b55",
+      "#e8d7b0",
+      "#5a3f7a"
+    ],
     "line": "#c9a14a",
     "highlight": "#ffffff",
     "hub": "#1b2547"
