@@ -5,7 +5,7 @@
 //
 // 【エンドポイント】
 //   GET  /                         動作確認用
-//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信
+//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信(env=prod / env=test の指定は必須)
 //   POST /admin/config?env=        設定(ギフト・抽選テーブル・全体設定)を保存
 //   POST /admin/test-gift?env=     テスト用の疑似ギフト(Webhookと同じ処理を通す)
 //   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
@@ -36,7 +36,7 @@ const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WORKER_VERSION = '1.1.0';
+export const WORKER_VERSION = '1.2.0';
 
 const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY'];
 
@@ -305,8 +305,11 @@ export default {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
           return reply(cors, 401, { error: 'Webhook の合言葉が違います' });
         }
-        const envName = url.searchParams.get('env') || 'prod';
-        if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+        // env を省略したときに本番へ書き込まないよう、prod / test の明示を必須にする
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) {
+          return reply(cors, 400, { error: 'Webhook の URL に env=prod か env=test を付けてください(省略はできません)' });
+        }
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));

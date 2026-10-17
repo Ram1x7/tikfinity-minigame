@@ -3,3 +3,20 @@ node_modules/
 .dev.vars
 *.log
 screenshots/
+
+# 秘密情報(誤ってコミットしないように)
+# Firebase サービスアカウントの秘密鍵(Firebase コンソールからダウンロードした JSON)
+*-firebase-adminsdk-*.json
+service-account*.json
+serviceAccount*.json
+*credentials*.json
+# 秘密鍵・証明書
+*.pem
+*.key
+*.p12
+# 環境変数ファイル(Cloudflare の .dev.vars は上で除外済み)
+.env
+.env.*
+
+# 生成物の置き忘れ(出力先を渡し忘れたスクリプトが作るフォルダー)
+undefined/
