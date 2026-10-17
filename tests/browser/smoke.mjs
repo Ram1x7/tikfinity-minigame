@@ -281,6 +281,8 @@ try {
     assert.ok(m.chipEff >= 36, `結果の一覧の見た目の大きさ ${m.chipEff.toFixed(1)}px`);
     assert.ok(m.labelEff >= 28 * m.zoom - 0.5, `札の文字 ${m.labelEff.toFixed(1)}px`);
     assert.equal(m.overflow, 0, '札の文字がはみ出していない');
+    // レア度別の演出(SSR)は時間がたつと要素ごと消え、通常の表示に戻る
+    await page.waitForFunction(() => !document.querySelector('.fx'), null, { timeout: 15000 });
     assert.deepEqual(errors, []);
     console.log(`✔ 表示画面(和風・初期値): コメント欄よけ 1100 で ${Math.round(m.zoom * 100)}%、結果の文字 ×${m.boost.toFixed(2)}`);
     await page.close();

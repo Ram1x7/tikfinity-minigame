@@ -15,6 +15,7 @@
 //   &speed=2       演出の速さ(テスト用)
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
 //   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。gacha / roulette で片方だけ
+//   &rarity=SSR    見本の結果のレア度をそろえる(レア度別の演出の確認用。demo のときだけ)
 //   &guide=1       コメント欄の目安と safe の線を表示する(調整用。配信には使わない)
 //   &debug=1       画面の大きさ・倍率を左下に表示する
 //   &soft=2        配信映像で文字がギザギザに崩れる時の対策(1〜5)。縮小前にごく軽くぼかして崩れを防ぐ
@@ -329,8 +330,12 @@ const DEMO_ITEMS = [
   },
 ];
 
+// &rarity=SSR … 見本の結果のレア度をそろえる(レア度別の演出の確認用)
+const demoRarity = /^(N|R|SR|SSR)$/.test(params.get('rarity') || '') ? params.get('rarity') : '';
+
 async function startDemo() {
-  const items = demo === '1' ? DEMO_ITEMS : DEMO_ITEMS.filter((it) => it.mode === demo);
+  let items = demo === '1' ? DEMO_ITEMS : DEMO_ITEMS.filter((it) => it.mode === demo);
+  if (demoRarity) items = items.map((it) => ({ ...it, rolls: it.rolls.map((r) => ({ ...r, rarity: demoRarity })) }));
   for (let i = 0; ; i++) {
     queue.push({ key: `demo${i}`, item: items[i % items.length] });
     await drain();

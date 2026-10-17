@@ -3,6 +3,7 @@
 // 画像は theme.json で指定されたもの(js/theme.js)を使う
 import { rarityColor, sleep } from './visual.js';
 import { img, rarityBadge, iconFor, fitText, textBoostOf } from './theme.js';
+import { playRarityEffect } from './effects.js';
 
 export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
@@ -70,6 +71,11 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   fitText(label, Math.round(62 * textBoostOf(label)), 28);
   card.style.visibility = '';
   card.style.opacity = '';
+  // レア度別の演出(再生の枠の中だけ。終わると自動で消える)
+  playRarityEffect(wrap, theme, roll.rarity, {
+    color, speed,
+    focus: { x: card.offsetLeft, y: card.offsetTop, w: card.offsetWidth, h: card.offsetHeight },
+  });
   await card.animate(
     [{ opacity: 0, transform: 'translateY(40px) scale(.7) rotateY(80deg)' }, { opacity: 1, transform: 'translateY(0) scale(1.04) rotateY(0)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: t(520), easing: 'ease-out', fill: 'forwards' }

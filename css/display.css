@@ -384,3 +384,57 @@ body {
   padding: 8px 30px;
   text-shadow: 0 0 6px #fff, 0 0 2px #fff;
 }
+
+/* ---------------- 当選時のレア度別の演出(画像テーマ。js/effects.js) ----------------
+ * 再生の枠の中だけに描き、終わると要素ごと取り除く。 */
+.theme-image .fx {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.theme-image .fx__glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fx-color) 85%, #fff) 0%, color-mix(in srgb, var(--fx-color) 45%, transparent) 35%, transparent 65%);
+  opacity: 0;
+}
+.theme-image .fx__rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1100px;
+  height: 1100px;
+  margin: -550px 0 0 -550px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--fx-color) 70%, transparent) 0deg 6deg, transparent 6deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 25%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 25%, transparent 62%);
+  opacity: 0;
+}
+.theme-image .fx__aura {
+  position: absolute;
+  border-radius: 28px;
+  box-shadow: 0 0 36px 14px var(--fx-color), 0 0 0 6px color-mix(in srgb, var(--fx-color) 70%, #fff);
+  opacity: 0;
+}
+.theme-image .fx__petal {
+  position: absolute;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, #ffd9e4, #f39ab5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+}
+.theme-image .fx__gold {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #fff6d0, #e3b54a 60%, #a77a22);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+}

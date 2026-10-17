@@ -5,10 +5,12 @@
 //   - 文字が小さくなりすぎる扇形には番号を表示する
 //   - 番号・省略(…)の扇形があるときは、針の下にある候補の名前を大きく表示する(回転中も更新)
 // ようにしている。扇形の大きさは確率どおりのまま変えない。
-// 画像テーマでは、省略(…)になる扇形も番号にそろえ、針の下の候補名は盤面の外(下)に出す。
+// 画像テーマでは、名前が1つでも収まらなければ全部の扇形を番号にそろえ、
+// 針の下の候補の「番号. 名前」を盤面の外(下)に大きく出す。
 // 止まった後は盤面を小さくして上に寄せ、空いた下側に結果枠を出す(盤面を大きく隠さない)。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
 import { img, resultFrame, fitText, textBoostOf } from './theme.js';
+import { playRarityEffect } from './effects.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
 const MIN_TEXT_CSS_PX = 24; // 扇形の文字がこれより小さくなる場合は番号にする(1080×1920 基準)
@@ -103,6 +105,19 @@ function planLabels(ctx, slices, skin, cssSize, { numberIfTruncated = false } = 
       return { mode: 'number', text: String(s.index + 1), fontSize: numSize, drawable: s.sweep >= 0.05 };
     }
     return { mode: 'text', text, fontSize, truncated };
+  });
+}
+
+/**
+ * 画像テーマ: 1つでも番号の扇形があれば、全部の扇形を番号にそろえる
+ * (名前と番号が混ざると読み取りにくいため)。名前がすべて収まるならそのまま。
+ */
+export function unifyPlans(plans, slices, toCss) {
+  if (!plans.some((p) => p.mode === 'number')) return plans;
+  return plans.map((p, i) => {
+    if (p.mode === 'number') return p;
+    const numSize = Math.min(64, Math.max(28 / toCss, slices[i].sweep * 260));
+    return { mode: 'number', text: String(slices[i].index + 1), fontSize: numSize, drawable: true };
   });
 }
 
@@ -223,7 +238,11 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
 
   const labelOptions = { numberIfTruncated: Boolean(theme) };
   let ctx = setupCanvas(canvas, cssSize);
-  let plans = planLabels(ctx, slices, skin, cssSize, labelOptions);
+  const plan = () => {
+    const p = planLabels(ctx, slices, skin, cssSize, labelOptions);
+    return theme ? unifyPlans(p, slices, cssSize / SIZE) : p;
+  };
+  let plans = plan();
   // 番号・省略のある盤面では、針の下の候補名を大きく出す
   const useTicker = plans.some((p) => p.mode === 'number' || p.truncated);
   if (theme && useTicker) {
@@ -231,7 +250,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     placeWheel(Math.round((size || 760) * 0.82));
     wrap.classList.add('roulette--ticker-below');
     ctx = setupCanvas(canvas, cssSize);
-    plans = planLabels(ctx, slices, skin, cssSize, labelOptions);
+    plans = plan();
   }
 
   // 針は真上(-90度)。当選した扇形の内側のどこかが真上に来る角度で止める。
@@ -291,6 +310,11 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
       { duration: t(420), easing: 'ease-in-out', fill: 'forwards' }
     );
     await sleep(t(200));
+    // レア度別の演出(結果枠のまわり。終わると自動で消える)
+    playRarityEffect(wrap, theme, roll.rarity, {
+      color: rarityColor(roll.rarity, roll.color), speed,
+      focus: { x: result.offsetLeft - result.offsetWidth / 2, y: result.offsetTop, w: result.offsetWidth, h: result.offsetHeight },
+    });
   }
   await result.animate(
     [{ opacity: 0, transform: 'translateX(-50%) scale(.7)' }, { opacity: 1, transform: 'translateX(-50%) scale(1.06)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }],

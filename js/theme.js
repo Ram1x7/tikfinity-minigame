@@ -126,6 +126,7 @@ export async function loadTheme(name) {
     icons: (manifest.icons || []).map((i) => ({ src: url(i.file), words: i.words || [] })),
     geometry: manifest.geometry || {},
     roulette: manifest.roulette || {},
+    effects: manifest.effects || {}, // 当選時のレア度別の演出(js/effects.js)
   };
 
   const styles = [manifest.css ? url(manifest.css) : null, ...(manifest.fonts || [])].filter(Boolean);
