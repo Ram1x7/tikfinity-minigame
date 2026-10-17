@@ -13,6 +13,7 @@
 //   &preview=1     プレビュー用。開いた後に届いた分だけ再生し、再生位置を保存しない
 //   &demo=1        見本を繰り返し再生する(Firebase に接続しない)。PRISM での大きさ・位置合わせ用
 //   &debug=1       画面の大きさ・倍率を左下に表示する
+//   &soft=2        配信映像で文字がギザギザに崩れる時の対策(1〜5)。縮小前にごく軽くぼかして崩れを防ぐ
 // ============================================================
 import { getEnv } from './env.js';
 // Firebase(js/store.js)は demo=1 のときは読み込まない(接続できない環境でも見本を表示できるように)
@@ -27,6 +28,8 @@ const speed = Math.min(5, Math.max(0.2, Number(params.get('speed')) || 1));
 const preview = params.get('preview') === '1';
 const demo = params.get('demo') === '1';
 const debug = params.get('debug') === '1' || demo;
+// 配信用に大きく縮小される時、細い線が飛び飛びに拾われて文字が崩れるのを防ぐための、ごく軽いぼかし
+const soft = Math.min(5, Math.max(0, Number(params.get('soft')) || 0));
 
 const ROLL_GAP_MS = 500 / speed;      // 連続抽選の間隔
 const RESULT_HOLD_MS = 1600 / speed;  // 1回ごとの結果を見せる時間
@@ -59,12 +62,15 @@ function fit() {
   } else {
     stage.style.transform = `scale(${scale})`;
   }
+  // soft 1 段階 ≒ 実際の画素で約1px 分のぼかし(倍率・画素密度に関係なく同じ効き方にする)
+  const dprNow = window.devicePixelRatio || 1;
+  stage.style.filter = soft > 0 ? `blur(${(soft / (scale * dprNow)).toFixed(3)}px)` : '';
   if (debug) {
     debugEl.hidden = false;
     const dpr = window.devicePixelRatio || 1;
     const lines = [
       `表示領域 ${w}×${h}  倍率 ${scale.toFixed(2)}  DPR ${dpr}`,
-      `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px`,
+      `実際の描画 ${Math.round(1080 * scale * dpr)}×${Math.round(1920 * scale * dpr)}px  soft ${soft}`,
     ];
     if (w > h) lines.push('⚠ 横長です。Web ソースを縦長(例 1080×1920)にしてください');
     else if (scale * dpr < 0.9) lines.push('⚠ 小さく描画されています。Web ソースの幅・高さを大きくしてください');
