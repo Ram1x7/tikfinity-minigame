@@ -137,6 +137,15 @@ export async function diagnose(workerUrlInput, adminKeyInput) {
     add(true, 'この Worker で使える環境', info.allowedEnvs.length
       ? info.allowedEnvs.map((e) => (e === 'prod' ? '本番' : 'テスト')).join('・') + 'のみ(ALLOWED_ENVS)'
       : 'なし(ALLOWED_ENVS の値を確認してください)');
+    if (!info.allowedEnvs.includes('prod')) {
+      // 本番への要求を本当に拒否するか確かめる。合言葉を付けないので、拒否されなくても何も読み書きしない
+      try {
+        const res = await fetch(`${url.origin}/display/claim?env=prod`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' });
+        add(res.status === 403, '本番への要求の拒否', res.status === 403 ? '本番(env=prod)への要求は拒否されます' : `拒否されませんでした(応答 ${res.status})。ALLOWED_ENVS を確認してください`);
+      } catch {
+        add(null, '本番への要求の拒否', '確認できませんでした');
+      }
+    }
   }
 
   if (info.allowedOrigins && info.allowedOrigins.length > 0 && !info.allowedOrigins.includes(location.origin)) {

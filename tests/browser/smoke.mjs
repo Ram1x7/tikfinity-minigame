@@ -121,7 +121,8 @@ async function newPage(viewport) {
     }
     workerCalls.push({ path: url.pathname, search: url.search, body: body ? JSON.parse(body) : null, key: r.request().headers()['x-admin-key'] });
     const replies = {
-      '/': { ok: true, service: 'tikfinity-minigame', version: 'test', secrets: { FIREBASE_DB_URL: true, SA_CLIENT_EMAIL: true, SA_PRIVATE_KEY: true, WEBHOOK_KEY: false, ADMIN_KEY: true }, allowedOrigins: [] },
+      '/': { ok: true, service: 'tikfinity-minigame', version: 'test', secrets: { FIREBASE_DB_URL: true, SA_CLIENT_EMAIL: true, SA_PRIVATE_KEY: true, WEBHOOK_KEY: false, ADMIN_KEY: true }, allowedOrigins: [],
+        allowedEnvs: workerEnv.ALLOWED_ENVS ? workerEnv.ALLOWED_ENVS.split(',') : null },
       '/admin/ping': { ok: true, firebase: 'ok' },
       '/admin/test-gift': { status: 'queued', key: '-x', rolls: ['釣り'] },
     };
@@ -574,8 +575,20 @@ try {
     await page.waitForSelector('#t-result .log--queued');
     const sent = workerCalls.slice(before).find((c) => c.path === '/admin/test-gift');
     assert.equal(sent.search, '?env=test', 'プレビューサイトからは本番へ送らない');
-    assert.deepEqual(errors, []);
-    console.log('✔ プレビューサイト: ?env=prod でもテスト環境として動く');
+    // テスト専用 Worker(ALLOWED_ENVS=test)なら、接続テストで本番への要求が拒否されることまで確かめる
+    workerEnv.ALLOWED_ENVS = 'test';
+    await page.goto(`${base}/admin.html`);
+    await page.evaluate(() => { document.getElementById('conn-card').open = true; });
+    await page.fill('#conn-url', 'https://worker.test');
+    await page.click('#conn-test');
+    await page.waitForFunction(() => document.querySelectorAll('#conn-checks .check').length > 3, null, { timeout: 10000 });
+    const checks = await page.$$eval('#conn-checks .check', (els) => els.map((e) => e.textContent));
+    assert.ok(checks.some((c) => c.startsWith('✓この Worker で使える環境') && c.includes('テストのみ')), `接続テスト: ${checks}`);
+    assert.ok(checks.some((c) => c.startsWith('✓本番への要求の拒否')), `接続テスト: ${checks}`);
+    delete workerEnv.ALLOWED_ENVS;
+    // 本番への確認の要求が 403 で返るのは想定どおり(ブラウザがコンソールに出す)
+    assert.deepEqual(errors.filter((e) => !e.includes('status of 403')), []);
+    console.log('✔ プレビューサイト: ?env=prod でもテスト環境として動き、接続テストで本番の拒否を確認できる');
     await page.close();
   }
 

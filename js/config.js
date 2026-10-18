@@ -38,7 +38,8 @@ const PREVIEW = {
     projectId: 'tikfinity-minigame-test',
     appId: '1:659941206860:web:152b140922a8dead58fde9',
   },
-  workerUrl: '',        // 例: 'https://tikfinity-minigame-preview.xxxx.workers.dev'
+  // テスト専用 Worker(ALLOWED_ENVS=test)
+  workerUrl: 'https://tikfinity-minigame-preview.saiyowa0517.workers.dev',
 };
 
 /** 本番以外の場所(プレビューサイト・手元の確認用サーバー)で開いているか */
