@@ -222,6 +222,9 @@
 .theme-wafu .img-card[data-rarity] .img-card__window {
   box-shadow: inset 0 0 0 8px var(--rarity);
 }
+.img-card__label.phrased,
+.img-result__text.phrased { word-break: keep-all; }
+
 .img-card__label {
   flex: 1 1 auto;
   min-height: 0;
@@ -236,10 +239,10 @@
   color: var(--indigo);
   font-weight: 900;
   line-height: 1.25;
-  /* 日本語を文節の切れ目で折り返す(対応していないブラウザは従来どおり1文字単位)。
-     文節が入らないときは fitText が文字を小さくし、最小でも入らなければ途中で折る */
+  /* 日本語は文節に近いまとまりの間(js/text.js が入れる <wbr>)でだけ折り返す(.phrased)。
+     Chrome でも iPad の WebKit でも同じ折り返しになる。まとまりが入らないときは fitText が
+     文字を小さくし、最小でも入らなければ途中で折る */
   word-break: break-word;
-  word-break: auto-phrase;
   overflow: hidden;
 }
 .img-card__icon {
@@ -264,6 +267,8 @@
 .img-wheel canvas {
   position: absolute;
   margin: 0;
+  /* 回転中は CSS の transform で回す(js/play-roulette.js)。GPU で合成して描き直しを省く */
+  will-change: transform;
 }
 .img-wheel__ring {
   position: absolute;
@@ -340,10 +345,10 @@
   color: var(--indigo);
   font-weight: 900;
   line-height: 1.2;
-  /* 日本語を文節の切れ目で折り返す(対応していないブラウザは従来どおり1文字単位)。
-     文節が入らないときは fitText が文字を小さくし、最小でも入らなければ途中で折る */
+  /* 日本語は文節に近いまとまりの間(js/text.js が入れる <wbr>)でだけ折り返す(.phrased)。
+     Chrome でも iPad の WebKit でも同じ折り返しになる。まとまりが入らないときは fitText が
+     文字を小さくし、最小でも入らなければ途中で折る */
   word-break: break-word;
-  word-break: auto-phrase;
   overflow: hidden;
 }
 .img-result--icon .img-result__text { left: var(--result-text-left-icon, 23%); }
@@ -372,4 +377,128 @@
     3px 3px 0 var(--indigo-deep), -3px 3px 0 var(--indigo-deep),
     3px -3px 0 var(--indigo-deep), -3px -3px 0 var(--indigo-deep),
     0 0 10px rgba(18, 26, 54, 0.8);
+}
+
+/* ================================================================
+ * 第1段階の装飾: 金属光沢・控えめな和柄・角の飾り・光沢アニメーション
+ * 台紙の地(半透明 93%)は変えず、その上に細い線と縁取りを重ねるだけ。
+ * ================================================================ */
+.theme-wafu {
+  /* 金属の金(明暗を重ねたグラデーション) */
+  --gold-metal: linear-gradient(135deg, #7a5a1c 0%, #c9a14a 16%, #fff0bf 32%, #d9b25a 46%, #8f6a24 60%, #e8c877 78%, #fff5d0 90%, #a47a2c 100%);
+  --gold-text: linear-gradient(180deg, #fff6d4 0%, #f1d58a 38%, #c39436 52%, #f6e3a6 78%, #fff3cc 100%);
+  --mizu: #7ec8e3;
+  --sakura: #f2a7bf;
+  --murasaki: #8b4fd0;
+}
+
+/* 台紙: 金属光沢の縁取り(画像の角の丸みに合わせた輪)。地の色・透け具合はそのまま */
+.theme-wafu .event {
+  isolation: isolate;
+  border-color: transparent;
+  box-shadow: var(--shadow), inset 0 0 0 3px rgba(214, 173, 82, 0.35), inset 0 0 70px rgba(126, 200, 227, 0.10);
+}
+.theme-wafu .event::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 6px solid transparent;
+  border-radius: 40px;
+  background: var(--gold-metal) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+/* 台紙の内側: 上下の端だけに薄い青海波、四隅に扇と桜(文字の場所には掛けない) */
+.theme-wafu .event::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 34px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform=''%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") left 8px top 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(140 0) scale(-1 1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") right 8px top 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(0 140) scale(1 -1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") left 8px bottom 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(140 140) scale(-1 -1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") right 8px bottom 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48' viewBox='0 0 96 48'%3E%3Cg fill='none' stroke='%23d6ad52' stroke-opacity='0.55' stroke-width='1.6'%3E%3Cpath d='M-48 24a48 48 0 0 1 96 0'/%3E%3Cpath d='M-36 24a36 36 0 0 1 72 0'/%3E%3Cpath d='M-24 24a24 24 0 0 1 48 0'/%3E%3Cpath d='M-12 24a12 12 0 0 1 24 0'/%3E%3Cpath d='M48 24a48 48 0 0 1 96 0'/%3E%3Cpath d='M60 24a36 36 0 0 1 72 0'/%3E%3Cpath d='M72 24a24 24 0 0 1 48 0'/%3E%3Cpath d='M84 24a12 12 0 0 1 24 0'/%3E%3Cpath d='M0 48a48 48 0 0 1 96 0'/%3E%3Cpath d='M12 48a36 36 0 0 1 72 0'/%3E%3Cpath d='M24 48a24 24 0 0 1 48 0'/%3E%3Cpath d='M36 48a12 12 0 0 1 24 0'/%3E%3Cpath d='M0 0a48 48 0 0 1 96 0'/%3E%3Cpath d='M12 0a36 36 0 0 1 72 0'/%3E%3Cpath d='M24 0a24 24 0 0 1 48 0'/%3E%3Cpath d='M36 0a12 12 0 0 1 24 0'/%3E%3C/g%3E%3C/svg%3E") center top / 96px 48px repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.35) 16%, transparent 30%, transparent 74%, rgba(0, 0, 0, 0.35) 88%, #000 100%);
+  mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.35) 16%, transparent 30%, transparent 74%, rgba(0, 0, 0, 0.35) 88%, #000 100%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.theme-wafu.no-panel .event::before,
+.theme-wafu.no-panel .event::after { display: none; }
+
+/* ギフト名: 金属の金の文字 */
+.theme-wafu .event__gift {
+  background: var(--gold-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(10, 14, 32, 0.85));
+}
+.theme-wafu.no-panel .event__gift {
+  background: none;
+  color: var(--gold);
+  filter: none;
+}
+
+/* 送信者名が長いときは2行に分ける(js/display.js の showSender)。「さん」は名前から離さない */
+.theme-wafu .event__honorific { white-space: nowrap; }
+.theme-wafu .event__sender.is-2line {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  /* 明朝体は字面が行の高さからはみ出しやすいので、行間を少し広めにする */
+  line-height: 1.32;
+  max-height: 2.7em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: clip;
+}
+
+/* タイトル帯に光が1回走る(項目ごと)。光は帯の画像の形の中だけ */
+.theme-wafu .event__title { position: relative; }
+.theme-wafu .event__title::after,
+.theme-wafu .img-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 246, 214, 0.55) 46%, rgba(255, 255, 245, 0.95) 50%, rgba(255, 246, 214, 0.55) 54%, transparent 62%) 100% 0 / 300% 100% no-repeat;
+  opacity: 0;
+}
+.theme-wafu .event__title::after {
+  -webkit-mask: var(--img-title-banner) center / 100% 100% no-repeat;
+  mask: var(--img-title-banner) center / 100% 100% no-repeat;
+}
+.theme-wafu .event__title.sheen::after { animation: wafu-sheen 1.3s 0.35s ease-out both; }
+/* 札: 現れた後に枠の金に光が1回走る(枠の画像の形の中だけ) */
+.theme-wafu .img-card::after {
+  -webkit-mask: var(--img-card-frame) 0 0 / 100% 100% no-repeat;
+  mask: var(--img-card-frame) 0 0 / 100% 100% no-repeat;
+}
+/* 札が現れたとき(js/play-gacha-image.js が .sheen を付ける) */
+.theme-wafu .img-card.sheen::after { animation: wafu-sheen 1.4s 0.35s ease-in-out both; }
+@keyframes wafu-sheen {
+  from { background-position: 100% 0; opacity: 1; }
+  to { background-position: 0 0; opacity: 1; }
+}
+
+/* 結果の一覧・針の下の候補名・残り件数: 縁を金属の金に(中は不透明なので地は変わらない) */
+.theme-wafu .chip,
+.theme-wafu .roulette__ticker {
+  border-color: transparent;
+  background: linear-gradient(var(--washi), var(--washi)) padding-box, var(--gold-metal) border-box;
+}
+.theme-wafu #pending {
+  border-color: transparent;
+  background: linear-gradient(var(--indigo), var(--indigo)) padding-box, var(--gold-metal) border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-wafu .event__title.sheen::after,
+  .theme-wafu .img-card.sheen::after { animation: none; }
 }

@@ -12,6 +12,7 @@
 // すべて HTML の文字として重ねる(画像に文字を焼き込まない)。
 // ============================================================
 import { rarityColor } from './visual.js';
+import { setPhrased } from './text.js';
 
 const THEMES_BASE = new URL('../images/themes/', import.meta.url);
 
@@ -192,6 +193,8 @@ export async function loadTheme(name) {
   css.setProperty('--pointer-width', `${pt.width ?? 12.6}%`);
   css.setProperty('--pointer-top', `${pt.top ?? 0.5}%`);
   if (theme.images.titleBanner) css.setProperty('--img-title-banner', `url("${theme.images.titleBanner}")`);
+  // 札の枠の形(光沢を枠の形の中だけに走らせるため。横に広げた画像なら data URL)
+  if (theme.images.cardFrame) css.setProperty('--img-card-frame', `url("${theme.images.cardFrame}")`);
   // 札・結果枠は画像の縦横比のまま表示する(比率の違う画像に差し替えても歪まないように)
   const ratio = (src, fallback) => {
     const im = imgs.get(src);
@@ -300,7 +303,7 @@ export function resultFrame(theme, roll) {
   wrap.style.setProperty('--rarity', themeRarityColor(theme, roll.rarity, roll.color));
   const text = document.createElement('div');
   text.className = 'img-result__text';
-  text.textContent = roll.label;
+  setPhrased(text, roll.label);
   wrap.append(img(theme.images.resultFrame, 'img-result__frame'), rarityBadge(theme, roll.rarity, 'img-result__rarity'), text);
   const icon = iconFor(theme, roll.label);
   if (icon) {

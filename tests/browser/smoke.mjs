@@ -398,6 +398,14 @@ try {
     assert.ok(tick.ticker >= tick.wheel, `候補名が盤面に重なっている: ${JSON.stringify(tick)}`);
     // 止まった後は盤面を小さくして上に寄せ、結果枠は盤面の下側に少しだけ重ねる
     await waitOpaque('.roulette__result');
+    // 盤面を CSS で回しても、針の下で止まる候補は抽選結果のまま
+    const landed = await page.evaluate(() => ({
+      landed: document.querySelector('.roulette').dataset.landed,
+      result: document.querySelector('.img-result__text').textContent,
+      spin: document.querySelector('.img-wheel canvas').style.transform,
+    }));
+    assert.equal(landed.landed, landed.result, `針の下の候補と結果: ${JSON.stringify(landed)}`);
+    assert.equal(landed.spin, '', '止まったら CSS の回転を外して描き直す');
     await page.waitForTimeout(600);
     const stop = await page.evaluate(() => {
       const w = document.querySelector('.img-wheel').getBoundingClientRect();

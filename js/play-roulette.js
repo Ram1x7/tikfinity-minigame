@@ -273,7 +273,15 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     if (tickerBase) fitText(ticker, tickerBase, Math.round(tickerBase * 0.6), { oneLine: true });
   };
 
-  drawWheel(ctx, slices, plans, startRot, -1, skin);
+  // 画像テーマ: 盤面は最初に1回だけ描き、回転は CSS の transform で行う(毎フレーム描き直さない)。
+  // iPad など描画の遅い端末でも滑らかに回る。止まる位置・当選は従来と同じ計算のまま。
+  const cssSpin = Boolean(theme);
+  const turnTo = (rot) => {
+    if (cssSpin) canvas.style.transform = `rotate(${rot}rad)`;
+    else drawWheel(ctx, slices, plans, rot, -1, skin);
+  };
+  if (cssSpin) drawWheel(ctx, slices, plans, 0, -1, skin);
+  turnTo(startRot);
   if (useTicker) {
     ticker.hidden = false;
     if (theme) tickerBase = parseFloat(getComputedStyle(ticker).fontSize);
@@ -287,7 +295,7 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     const frame = (now) => {
       const p = Math.min(1, (now - began) / duration);
       const rot = startRot + (endRot - startRot) * easeOutCubic(p);
-      drawWheel(ctx, slices, plans, rot, -1, skin);
+      turnTo(rot);
       updateTicker(rot);
       if (p < 1) requestAnimationFrame(frame);
       else resolve();
@@ -295,7 +303,10 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     requestAnimationFrame(frame);
   });
 
+  // 止まったら、当たりの強調と番号の向きを付けて描き直す(CSS の回転は外す)
+  if (cssSpin) canvas.style.transform = '';
   drawWheel(ctx, slices, plans, endRot, target, skin);
+  wrap.dataset.landed = sliceAt(slices, endRot).label; // 確認用: 針の下で止まった候補
   ticker.hidden = true;
   const text = result.querySelector('.img-result__text');
   if (text) fitText(text, Math.round(60 * textBoostOf(text)), 30);

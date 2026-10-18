@@ -4,6 +4,7 @@
 import { sleep } from './visual.js';
 import { img, rarityBadge, iconFor, fitText, textBoostOf, themeRarityColor } from './theme.js';
 import { playRarityEffect } from './effects.js';
+import { setPhrased } from './text.js';
 
 export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
@@ -27,7 +28,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   windowEl.className = 'img-card__window';
   const label = document.createElement('div');
   label.className = 'img-card__label';
-  label.textContent = roll.label;
+  setPhrased(label, roll.label); // 文節に近いまとまりで折り返す(iPad の WebKit でも)
   windowEl.append(rarityBadge(theme, roll.rarity, 'img-card__rarity'), label);
   const icon = iconFor(theme, roll.label);
   if (icon) windowEl.append(img(icon, 'img-card__icon'));
@@ -72,6 +73,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   fitText(label, Math.round(62 * textBoostOf(label)), 28);
   card.style.visibility = '';
   card.style.opacity = '';
+  card.classList.add('sheen'); // 現れたときに枠の金に光が1回走る(theme.css)
   // レア度別の演出(再生の枠の中だけ。終わると自動で消える)
   playRarityEffect(wrap, theme, roll.rarity, {
     color, speed,

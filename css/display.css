@@ -206,6 +206,32 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+.theme-image .chip__rarity { flex: none; }
+/* 結果の文字。1行に入りきらないときは、左右にゆっくり流して全部見せる(js/display.js の marqueeIfLong) */
+.theme-image .chip__text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.theme-image .chip__scroll { display: inline-block; }
+.theme-image .chip__text.is-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 18px), transparent);
+}
+.theme-image .is-marquee .chip__scroll {
+  padding-left: 6px;
+  animation: chip-marquee var(--marquee-time, 6s) ease-in-out infinite;
+}
+@keyframes chip-marquee {
+  0%, 18% { transform: translateX(0); }
+  62%, 84% { transform: translateX(var(--marquee-x, 0)); }
+  100% { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-image .is-marquee .chip__scroll { animation: none; }
 }
 .chip--more { border-color: var(--ink); color: var(--ink); }
 .chip__rarity {

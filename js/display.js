@@ -216,7 +216,18 @@ function addChip(roll) {
   const r = document.createElement('span');
   r.className = 'chip__rarity';
   r.textContent = roll.rarity || 'N';
-  li.append(r, document.createTextNode(roll.label));
+  if (legacyChips) {
+    li.append(r, document.createTextNode(roll.label));
+  } else {
+    // 画像テーマ: 結果の文字は枠の中で流せるよう、入れ物に入れる(長いときに末尾が切れないように)
+    const text = document.createElement('span');
+    text.className = 'chip__text';
+    const inner = document.createElement('span');
+    inner.className = 'chip__scroll';
+    inner.textContent = roll.label;
+    text.append(inner);
+    li.append(r, text);
+  }
   const chips = resultsEl.querySelectorAll('.chip:not(.chip--more)');
   if (chips.length >= maxChips()) {
     chips[0].remove();
@@ -233,13 +244,54 @@ function addChip(roll) {
     }
   }
   resultsEl.append(li);
-  // 画像テーマ: 縮めて文字を大きくしているとき、長い結果は1行に収まるところまで小さくする。
-  // 縮める前の大きさより小さくはしない(それでも入らなければ末尾を …)
-  if (!legacyChips && boost > 1) {
-    const base = parseFloat(getComputedStyle(li).fontSize);
-    fitText(li, base, Math.round(base / boost), { oneLine: true });
+  // 画像テーマ: 縮めて文字を大きくしているとき、長い結果は1行に収まるところまで小さくする
+  // (縮める前の大きさより小さくはしない)。それでも入らなければ、ゆっくり横に流して全部見せる
+  if (!legacyChips) {
+    const text = li.querySelector('.chip__text');
+    const base = parseFloat(getComputedStyle(text).fontSize);
+    fitText(text, base, boost > 1 ? Math.round(base / boost) : base, { oneLine: true });
+    marqueeIfLong(text);
   }
   renderCount();
+}
+
+/** 1行に入りきらない文字を、左右にゆっくり流して全部読めるようにする(画像テーマの結果の一覧) */
+function marqueeIfLong(box) {
+  const inner = box.firstElementChild;
+  const over = inner.offsetWidth - box.clientWidth;
+  if (over <= 1) return;
+  box.classList.add('is-marquee');
+  inner.style.setProperty('--marquee-x', `${-Math.ceil(over + 8)}px`);
+  // 流れる部分(1周の 44%)を秒速 160px ほどにする。最初と端で少し止まる
+  inner.style.setProperty('--marquee-time', `${Math.max(5, over / 160 / 0.44).toFixed(1)}s`);
+}
+
+/** 送信者名。画像テーマでは、1行で入りきらない長い名前を2行に分けて末尾まで見せる */
+function showSender(name) {
+  if (!theme) {
+    senderEl.textContent = `${name} さん`;
+    return;
+  }
+  const n = document.createElement('span');
+  n.className = 'event__name';
+  n.textContent = name;
+  const hon = document.createElement('span');
+  hon.className = 'event__honorific';
+  hon.textContent = ' さん';
+  senderEl.classList.remove('is-2line');
+  senderEl.replaceChildren(n, hon);
+  fitText(senderEl, 64, 44, { oneLine: true });
+  // 1px 未満のはみ出しでも末尾が「…」になるので、文字の実際の幅で判断する
+  const textW = n.getBoundingClientRect().width + hon.getBoundingClientRect().width;
+  if (textW > senderEl.getBoundingClientRect().width - 0.5) {
+    // 2行に収まる大きさまで小さくする(明朝体は字面が行からわずかにはみ出すので、行数で判断する)
+    senderEl.classList.add('is-2line');
+    for (let size = 56; size >= 30; size -= 2) {
+      senderEl.style.fontSize = `${size}px`;
+      const lineH = parseFloat(getComputedStyle(senderEl).lineHeight) || size * 1.32;
+      if (senderEl.scrollHeight <= lineH * 2.5 && senderEl.scrollWidth <= senderEl.clientWidth + 1) break;
+    }
+  }
 }
 
 async function playItem(item) {
@@ -249,7 +301,7 @@ async function playItem(item) {
   const mode = item.mode === 'roulette' ? 'roulette' : 'gacha';
 
   eventEl.dataset.mode = mode;
-  senderEl.textContent = `${item.sender || '視聴者'} さん`;
+  showSender(item.sender || '視聴者');
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
   hiddenChips = 0;
@@ -257,9 +309,12 @@ async function playItem(item) {
   renderCount();
   playEl.replaceChildren();
   if (theme) {
-    // タイトル帯・名前は1行に収まるまで文字を小さくする(収まらなければ末尾を … にする)
+    // タイトル帯は1行に収まるまで文字を小さくする(収まらなければ末尾を … にする)
     fitText(titleEl, 50, 28, { oneLine: true });
-    fitText(senderEl, 64, 38, { oneLine: true });
+    // 項目ごとに、タイトル帯に光が1回走る(theme.css の .sheen)
+    titleEl.classList.remove('sheen');
+    void titleEl.offsetWidth;
+    titleEl.classList.add('sheen');
   }
   applyPanelLayout(mode);
   eventEl.classList.add('show');
