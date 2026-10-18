@@ -30,7 +30,14 @@ const PRODUCTION = {
 
 // テスト専用(プレビュー)。テスト専用 Firebase プロジェクトとテスト専用 Worker の値を入れる
 const PREVIEW = {
-  firebaseConfig: null, // 例: { apiKey: '…', authDomain: '…', databaseURL: '…', projectId: '…', appId: '…' }
+  // テスト専用 Firebase プロジェクト tikfinity-minigame-test
+  firebaseConfig: {
+    apiKey: 'AIzaSyBHz3eeRo0KHSIS-gTrfqweu8MWQSdgCXY',
+    authDomain: 'tikfinity-minigame-test.firebaseapp.com',
+    databaseURL: 'https://tikfinity-minigame-test-default-rtdb.asia-southeast1.firebasedatabase.app',
+    projectId: 'tikfinity-minigame-test',
+    appId: '1:659941206860:web:152b140922a8dead58fde9',
+  },
   workerUrl: '',        // 例: 'https://tikfinity-minigame-preview.xxxx.workers.dev'
 };
 
