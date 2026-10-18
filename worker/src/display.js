@@ -23,7 +23,7 @@
 // 管理画面から外された画面は、30秒間は担当に戻れない(待機中の別の画面に確実に切り替えるため)。
 // ============================================================
 import { isEnv } from '../../shared/core.js';
-import { reply, safeEqual } from './http.js';
+import { reply, safeEqual, envAllowed, ENV_DENIED } from './http.js';
 
 export const PLAYER_TTL_MS = 30 * 1000;   // 更新が無ければ担当が切れるまでの時間
 export const HEARTBEAT_MS = 10 * 1000;    // 担当の更新間隔(表示画面に伝える)
@@ -105,6 +105,7 @@ const notHolder = (cors) => reply(cors, 409, { lost: true, error: '再生担当�
 export async function handleDisplay(request, env, db, url, cors) {
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+  if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
   const body = await readDisplayBody(request);
   const keyName = displayKeyName(envName);
   if (!env[keyName] || !String(env[keyName]).trim()) {

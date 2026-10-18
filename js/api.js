@@ -133,6 +133,12 @@ export async function diagnose(workerUrlInput, adminKeyInput) {
     add(null, 'Worker のシークレット', 'Worker が古い版のため確認できません。最新の worker/dist/worker.js を貼り付けてください');
   }
 
+  if (Array.isArray(info.allowedEnvs)) {
+    add(true, 'この Worker で使える環境', info.allowedEnvs.length
+      ? info.allowedEnvs.map((e) => (e === 'prod' ? '本番' : 'テスト')).join('・') + 'のみ(ALLOWED_ENVS)'
+      : 'なし(ALLOWED_ENVS の値を確認してください)');
+  }
+
   if (info.allowedOrigins && info.allowedOrigins.length > 0 && !info.allowedOrigins.includes(location.origin)) {
     add(false, 'ALLOWED_ORIGIN', `このページ(${location.origin})が許可されていません。ALLOWED_ORIGIN を「${location.origin}」にするか、削除してください`);
     return results;

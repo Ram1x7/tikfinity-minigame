@@ -272,3 +272,5 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
   background: linear-gradient(180deg, #8fc0ea 0 42%, #5f9a62 42% 100%);
 }
 .layout-previews figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+/* プレビューサイト(テスト専用の環境)の目印 */
+.env-switch__item.env-preview { background: #8a4fd0; color: #fff; }

@@ -48,7 +48,8 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const stubDb = await readFile(join(root, 'tests/browser/firebase-database-stub.js'), 'utf8');
 const stubConfig = `export const firebaseConfig = { apiKey: 'x', databaseURL: 'https://fake.example.com' };
-export const DEFAULT_WORKER_URL = 'https://worker.test';`;
+export const DEFAULT_WORKER_URL = 'https://worker.test';
+export const IS_PREVIEW_SITE = false;`;
 
 const workerCalls = [];
 
@@ -553,6 +554,28 @@ try {
     await page.screenshot({ path: join(shots, 'test-ipad.png'), fullPage: true });
     assert.deepEqual(errors, [], `テスト画面のエラー: ${errors}`);
     console.log('✔ テスト画面: 疑似ギフトを送信し、キューを表示できる');
+    await page.close();
+  }
+
+  // ---------- プレビューサイト: 本番を選べず、常にテスト環境 ----------
+  {
+    const { page, errors } = await newPage({ width: 390, height: 844 });
+    await page.route('**/js/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: stubConfig.replace('IS_PREVIEW_SITE = false', 'IS_PREVIEW_SITE = true') }));
+    await page.addInitScript(() => localStorage.setItem('tm.adminKey', 'admin-secret'));
+    await page.goto(`${base}/admin.html?env=prod`);
+    await page.waitForSelector('#env-switch a');
+    const nav = await page.$$eval('#env-switch > *', (els) => els.map((e) => e.textContent));
+    assert.deepEqual(nav, ['テスト', 'プレビュー(テスト専用)'], `切り替え: ${nav}`);
+    assert.equal(await page.isHidden('#env-warning'), true, '?env=prod でも本番の警告は出ない(テストとして動く)');
+    await page.goto(`${base}/test.html?env=prod`);
+    await page.fill('#t-gift', 'Rose');
+    const before = workerCalls.length;
+    await page.click('#t-send');
+    await page.waitForSelector('#t-result .log--queued');
+    const sent = workerCalls.slice(before).find((c) => c.path === '/admin/test-gift');
+    assert.equal(sent.search, '?env=test', 'プレビューサイトからは本番へ送らない');
+    assert.deepEqual(errors, []);
+    console.log('✔ プレビューサイト: ?env=prod でもテスト環境として動く');
     await page.close();
   }
 

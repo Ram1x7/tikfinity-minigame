@@ -77,6 +77,7 @@ PC は不要で、iPhone / iPad のブラウザだけで設定・運用できる
    | `DISPLAY_KEY_PROD` | 本番の表示画面(PRISM に設定する URL)に付ける合言葉(ほかの合言葉とは別のもの) |
    | `DISPLAY_KEY_TEST` | テストの表示画面に付ける合言葉(`DISPLAY_KEY_PROD` とは別のもの) |
    | `ALLOWED_ORIGIN` | (任意)`https://<ユーザー名>.github.io` を入れると、他のサイトから管理APIを呼べなくなる |
+   | `ALLOWED_ENVS` | (任意・テスト専用の Worker だけ)`test` にすると、`env=prod` や環境の指定が無い要求を Webhook・管理・表示のすべてで拒否する。本番の Worker には入れない |
 
 5. Worker の URL(`https://tikfinity-minigame.〜.workers.dev`)をブラウザで開き、`{"ok":true,...}` と出れば OK
 
@@ -202,6 +203,12 @@ Worker が理解できる項目名は次のとおりです(form 形式・JSON・
 - 表示画面は Referer で URL の合言葉をほかのサイトへ送らないようにしています(`<meta name="referrer" content="strict-origin">`)
 - 担当の状態(`state/display/player`)は誰でも読めますが、含まれるのは画面 ID と token のハッシュだけで、ハッシュから token は求められません
 
+### 9-2. テスト専用環境(プレビュー)
+
+本番に触れずに実機で試すための、テスト専用の Firebase・Worker・プレビューサイトの作り方は
+[`docs/preview-setup.md`](docs/preview-setup.md) にまとめています。
+プレビューサイト(本番の GitHub Pages 以外の場所)で開いたページは、`js/config.js` の `PREVIEW` の Firebase にだけつながり、常にテスト環境として動きます。
+
 ### 10. 再生担当への切り替え手順(Worker 1.2 以前から更新する場合)
 
 **順番を守ってください**(先にルールを変えると、古い表示画面が再生位置を保存できなくなります)。
@@ -209,7 +216,7 @@ Worker が理解できる項目名は次のとおりです(form 形式・JSON・
 1. **Worker**
    1. Cloudflare の Worker に、シークレット `DISPLAY_KEY_TEST` と `DISPLAY_KEY_PROD` を追加(長めのランダムな英数字。2つは別の値)
    2. 最新の [`worker/dist/worker.js`](worker/dist/worker.js) を貼り付けてデプロイ
-   3. 管理画面の「接続テスト」で、Worker のバージョンが 1.3.0、シークレットが「すべて設定済み」になることを確認
+   3. 管理画面の「接続テスト」で、Worker のバージョンが 1.4.0、シークレットが「すべて設定済み」になることを確認
    4. TikFinity の Webhook URL に `env=test` / `env=prod` が付いていることを確認(1.2.0 以降、付いていないと受け付けません)
    - この時点では古い表示画面もそのまま動きます(Firebase のルールがまだ古いため)
 2. **ページ(GitHub Pages)** を更新する(main に反映)
@@ -347,4 +354,6 @@ node tests/browser/smoke.mjs   # ブラウザでの動作確認(playwright が�
 - `worker/src/`:Worker 本体と Firebase REST クライアント
 - `js/store.js`:ブラウザで Firebase を扱う唯一のファイル
 - `js/api.js`:ブラウザから Worker を呼ぶ関数
+- `js/player.js`:表示画面の再生担当(Worker の `/display/*`)、`worker/src/display.js`:その Worker 側
+- `js/config.js`:本番のサイト(`PRODUCTION_HOSTS`)以外で開くと `PREVIEW` の設定を使う。手元のサーバー(localhost など)で開いた場合もプレビュー扱いになり、`PREVIEW` が未設定ならどの Firebase にもつながらない
 - 外部ライブラリは Firebase の公式 SDK(CDN)のみで、ビルド工程はありません

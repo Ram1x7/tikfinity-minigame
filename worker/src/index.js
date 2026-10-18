@@ -24,6 +24,8 @@
 //   DISPLAY_KEY_PROD  本番の表示画面(PRISM に設定する URL)に付ける合言葉
 //   DISPLAY_KEY_TEST  テストの表示画面に付ける合言葉(本番と別の値にする)
 //   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
+//   ALLOWED_ENVS      (任意) この Worker で使える環境。テスト専用の Worker では "test" にする。
+//                     一覧に無い環境(env=prod など)への要求は、Webhook・管理・表示のすべてで 403 にする
 // ============================================================
 
 import {
@@ -36,14 +38,14 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
-import { reply, safeEqual } from './http.js';
+import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
 import { handleDisplay, releaseByAdmin } from './display.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WORKER_VERSION = '1.3.0';
+export const WORKER_VERSION = '1.4.0';
 
 const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
@@ -229,7 +231,9 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   if (path === '/admin/ping') {
     // 接続テスト用: サービスアカウントで Firebase を読めるかまで確認する
     try {
-      await db.get('envs/test/config', { shallow: 'true' });
+      // 使える環境のうち1つを読む(テスト専用の Worker なら test)
+      const pingEnv = (allowedEnvs(env) || ['test'])[0] || 'test';
+      await db.get(`envs/${pingEnv}/config`, { shallow: 'true' });
       return reply(cors, 200, { ok: true, version: WORKER_VERSION, firebase: 'ok' });
     } catch (err) {
       return reply(cors, 200, { ok: false, version: WORKER_VERSION, firebase: String(err.message || err) });
@@ -240,6 +244,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (!isEnv(from) || !isEnv(to) || from === to) return reply(cors, 400, { error: 'from/to が不正です' });
+    if (!envAllowed(env, from) || !envAllowed(env, to)) return reply(cors, 403, { error: ENV_DENIED });
     const config = await db.get(`envs/${from}/config`);
     await db.put(`envs/${to}/config`, config || {});
     return reply(cors, 200, { ok: true });
@@ -247,6 +252,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
 
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+  if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
 
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
@@ -289,6 +295,8 @@ export default {
         version: WORKER_VERSION,
         secrets: secretStatus(env),
         allowedOrigins: allowedOrigins(env.ALLOWED_ORIGIN),
+        // この Worker で使える環境(null なら制限なし)
+        allowedEnvs: allowedEnvs(env),
       });
     }
     if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
@@ -305,6 +313,7 @@ export default {
         if (!isEnv(envName)) {
           return reply(cors, 400, { error: 'Webhook の URL に env=prod か env=test を付けてください(省略はできません)' });
         }
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));

@@ -4,7 +4,7 @@
 // 設定は Firebase から読み、保存は Worker 経由で行う(ブラウザから直接は書き込まない)。
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
-import { getEnv, envLabel, urlWithEnv } from './env.js';
+import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
 import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState } from './store.js';
 import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
@@ -57,7 +57,7 @@ function toPayload() {
 function renderHeader() {
   const nav = $('env-switch');
   nav.replaceChildren(
-    ...['test', 'prod'].map((e) => h('a', {
+    ...SELECTABLE_ENVS.map((e) => h('a', {
       href: urlWithEnv(e),
       class: `env-switch__item${e === env ? ' is-active' : ''} env-${e}`,
     }, envLabel(e)))
@@ -65,6 +65,8 @@ function renderHeader() {
   $('env-warning').hidden = env !== 'prod';
   $('copy-to-prod').hidden = env !== 'test';
   document.title = `管理画面(${envLabel(env)})`;
+  // プレビューサイトでは、テスト専用の環境につながっていることを示す
+  if (IS_PREVIEW_SITE) nav.append(h('span', { class: 'env-switch__item env-preview' }, 'プレビュー(テスト専用)'));
 }
 
 let currentLayout = loadSavedLayout();
