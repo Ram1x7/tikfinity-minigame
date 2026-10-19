@@ -505,7 +505,7 @@ try {
       ticker: document.querySelector('.roulette__ticker').getBoundingClientRect().top,
     }));
     assert.ok(tick.ticker >= tick.wheel, `候補名が盤面に重なっている: ${JSON.stringify(tick)}`);
-    // 止まった後は盤面を小さくして上に寄せ、結果枠は盤面の下側に少しだけ重ねる
+    // 止まった後は盤面を小さくして上に寄せ、結果カードは盤面の下側だけに重ねる(rouletteCard.ringOverlap)
     await waitOpaque('.roulette__result');
     // 盤面を CSS で回しても、針の下で止まる候補は抽選結果のまま
     const landed = await page.evaluate(() => ({
@@ -519,9 +519,12 @@ try {
     const stop = await page.evaluate(() => {
       const w = document.querySelector('.img-wheel').getBoundingClientRect();
       const r = document.querySelector('.roulette__result').getBoundingClientRect();
-      return { overlap: (w.bottom - r.top) / w.height };
+      const bodyTop = r.top + r.height * 0.06; // 結果カードの上の透明な余白(rouletteCard.body.top 6%)を除く
+      return { overlap: (w.bottom - bodyTop) / w.height, centerVisible: w.top + w.height / 2 < bodyTop };
     });
-    assert.ok(stop.overlap < 0.25, `結果枠が盤面を隠しすぎ: ${JSON.stringify(stop)}`);
+    // 仕様書: 盤面の下側 30% まで(針の下の当たりと中心は見えたまま)
+    assert.ok(stop.overlap <= 0.32, `結果カードが盤面を隠しすぎ: ${JSON.stringify(stop)}`);
+    assert.ok(stop.centerVisible, `盤面の中心が見えている: ${JSON.stringify(stop)}`);
     assert.deepEqual(errors, []);
     console.log('✔ 表示画面(和風): 画像・透過・コメント欄よけ・候補が多いルーレット(候補名は盤面の外、結果枠は盤面の下)');
     await page.close();
@@ -549,6 +552,7 @@ try {
         frame: res.querySelector('.img-result__frame').getAttribute('src').split('/').pop(),
         badge: res.querySelectorAll('.img-result__rarity').length,
         sender: res.querySelector('.img-result__sender')?.textContent,
+        senderInBand: Boolean(res.querySelector('.img-result__sub > .img-result__sender')),
         label: res.querySelector('.img-result__text').textContent,
         landed: document.querySelector('.roulette').dataset.landed,
         headerOpacity: Number(getComputedStyle(document.getElementById('ev-sender')).opacity),
@@ -556,9 +560,10 @@ try {
         inside: rr.left >= play.left - 1 && rr.right <= play.right + 1 && rr.bottom <= play.bottom + 1,
       };
     });
-    assert.ok(m.banner && m.frame === 'banner-ssr.png', `SSR の横長カード: ${m.frame}`);
+    assert.ok(m.banner && m.frame === 'roulette-card-ssr.png', `SSR の結果カード: ${m.frame}`);
     assert.equal(m.badge, 0, 'HTML のバッジは重ねない(枠に描かれている)');
     assert.equal(m.sender, 'みほん さん');
+    assert.ok(m.senderInBand, '送信者名は景品名の下の専用の帯');
     assert.equal(m.label, m.landed, '針の下で止まった候補と結果カードが同じ');
     assert.ok(m.headerOpacity < 0.05, 'カード表示中は見出しの送信者名を隠す');
     assert.equal(m.visibleChips, 0, 'カードと同じ結果は一覧に出さない');
@@ -599,7 +604,7 @@ try {
     // 横長カードの枠が1枚でも読めなければ、従来の結果枠(重複表示の整理もしない)
     const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
     await fb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
-    await fb.route('**/banner-n.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await fb.route('**/roulette-card-n.png', (r) => r.fulfill({ status: 404, body: '' }));
     await fb.goto(`${base}/display.html?demo=roulette&theme=wafu&rarity=SSR&speed=4`);
     await fb.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
     assert.equal(await fb.locator('.img-result--banner').count(), 0);

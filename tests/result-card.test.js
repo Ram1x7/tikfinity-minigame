@@ -34,11 +34,17 @@ test('結果カード: 4枚そろわない・設定が無い・不正な値', ()
   assert.deepEqual(rc.body, { left: 0, right: 0, top: 0, bottom: 0 });
 });
 
-test('和風ルーレットの横長カード: レア度ごとの枠と文字の場所', () => {
+test('和風ルーレットの横長カード: 正式素材(1200×540)と仕様書の安全領域', () => {
   const rc = parseRouletteCard(wafu);
-  assert.deepEqual(rc.frames, { N: 'banner-n.png', R: 'banner-r.png', SR: 'banner-sr.png', SSR: 'banner-ssr.png' });
-  // 文字の場所は左のバッジ(画像の 22% まで)と右の桜(74% から)を避ける
-  assert.ok(rc.text.left >= 22 && 100 - rc.text.right <= 74, `文字の場所 ${JSON.stringify(rc.text)}`);
+  assert.deepEqual(rc.frames, { N: 'roulette-card-n.png', R: 'roulette-card-r.png', SR: 'roulette-card-sr.png', SSR: 'roulette-card-ssr.png' });
+  // docs/wafu-roulette-card-spec.md の座標(1200×540 の画像に対する %)
+  const px = (b) => ({ x0: 12 * b.left, x1: 1200 - 12 * b.right, y0: 5.4 * b.top, y1: 540 - 5.4 * b.bottom });
+  const t = px(rc.text);
+  const s = px(rc.sub);
+  assert.ok(Math.abs(t.x0 - 168) <= 1 && Math.abs(t.x1 - 1032) <= 1 && Math.abs(t.y0 - 97) <= 1 && Math.abs(t.y1 - 362) <= 1, `景品名 ${JSON.stringify(t)}`);
+  assert.ok(Math.abs(s.x0 - 144) <= 1 && Math.abs(s.x1 - 1056) <= 1 && Math.abs(s.y0 - 383) <= 1 && Math.abs(s.y1 - 454) <= 1, `送信者名 ${JSON.stringify(s)}`);
+  assert.ok(t.y1 < s.y0, '景品名の下に送信者名');
+  assert.equal(rc.ringOverlap, 0.3);
   assert.ok(rc.width <= 988, '台紙の内側の幅に収まる');
   assert.equal(parseRouletteCard({ rouletteCard: { frames: { N: 'a.png' } } }), null, '4枚そろわなければ従来の結果枠');
   assert.equal(parseRouletteCard({}), null);

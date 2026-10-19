@@ -130,9 +130,11 @@
     "height": 880
   },
   "rouletteCard": {
-    "frames": { "N": "banner-n.png", "R": "banner-r.png", "SR": "banner-sr.png", "SSR": "banner-ssr.png" },
-    "body": { "left": 4, "right": 7, "top": 12, "bottom": 14 },
-    "text": { "left": 23, "right": 27, "top": 29, "bottom": 30 },
-    "width": 900
+    "frames": { "N": "roulette-card-n.png", "R": "roulette-card-r.png", "SR": "roulette-card-sr.png", "SSR": "roulette-card-ssr.png" },
+    "body": { "left": 3, "right": 3, "top": 6, "bottom": 6 },
+    "text": { "left": 14, "right": 14, "top": 18, "bottom": 33 },
+    "sub": { "left": 12, "right": 12, "top": 71, "bottom": 16 },
+    "width": 900,
+    "ringOverlap": 0.3
   }
 }
