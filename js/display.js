@@ -207,7 +207,11 @@ function renderCount() {
   countEl.textContent = hiddenChips > 0 && !legacyChips ? `${countBase}  (前の結果 ほか${hiddenChips}件)` : countBase;
 }
 
-function addChip(roll) {
+/**
+ * 結果の一覧に1件足す。inCard のときは、その結果が結果カードに出ているあいだ一覧では隠す
+ * (同じ景品名・レア度を2か所に出さない。次の抽選が始まったら showCardChips で一覧に出す)
+ */
+function addChip(roll, { inCard = false } = {}) {
   const li = document.createElement('li');
   li.className = 'chip';
   // 画像テーマはテーマのレア度の色(バッジ・札・演出と同じ色)
@@ -243,16 +247,29 @@ function addChip(roll) {
       resultsEl.prepend(more);
     }
   }
+  if (inCard) li.classList.add('chip--in-card');
   resultsEl.append(li);
-  // 画像テーマ: 縮めて文字を大きくしているとき、長い結果は1行に収まるところまで小さくする
-  // (縮める前の大きさより小さくはしない)。それでも入らなければ、ゆっくり横に流して全部見せる
-  if (!legacyChips) {
-    const text = li.querySelector('.chip__text');
-    const base = parseFloat(getComputedStyle(text).fontSize);
-    fitText(text, base, boost > 1 ? Math.round(base / boost) : base, { oneLine: true });
-    marqueeIfLong(text);
-  }
+  if (!inCard) fitChip(li);
   renderCount();
+}
+
+// 画像テーマ: 縮めて文字を大きくしているとき、長い結果は1行に収まるところまで小さくする
+// (縮める前の大きさより小さくはしない)。それでも入らなければ、ゆっくり横に流して全部見せる
+function fitChip(li) {
+  if (legacyChips) return;
+  const text = li.querySelector('.chip__text');
+  const base = parseFloat(getComputedStyle(text).fontSize);
+  fitText(text, base, boost > 1 ? Math.round(base / boost) : base, { oneLine: true });
+  marqueeIfLong(text);
+}
+
+/** 結果カードが消えたら(次の抽選・次の項目)、カードに出ていた結果を一覧に出す */
+function showCardChips() {
+  eventEl.classList.remove('event--card');
+  for (const li of resultsEl.querySelectorAll('.chip--in-card')) {
+    li.classList.remove('chip--in-card');
+    fitChip(li);
+  }
 }
 
 /** 1行に入りきらない文字を、左右にゆっくり流して全部読めるようにする(画像テーマの結果の一覧) */
@@ -301,6 +318,7 @@ async function playItem(item) {
   const mode = item.mode === 'roulette' ? 'roulette' : 'gacha';
 
   eventEl.dataset.mode = mode;
+  eventEl.classList.remove('event--card'); // 前の項目の結果カードの表示をやめ、見出しの送信者名を出す
   showSender(item.sender || '視聴者');
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
@@ -323,10 +341,16 @@ async function playItem(item) {
   for (let i = 0; i < rolls.length; i++) {
     countBase = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
     renderCount();
+    showCardChips();
     if (mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, theme });
-    else if (theme) await playGachaImage(playEl, rolls[i], { speed, theme });
-    else await playGacha(playEl, rolls[i], { speed });
-    addChip(rolls[i]);
+    else if (theme) {
+      // 和風の結果カード: カードが出たら、送信者名・景品名・レア度はカードの中だけに出す(theme.css の .event--card)
+      await playGachaImage(playEl, rolls[i], {
+        speed, theme, sender: item.sender || '視聴者',
+        onCard: () => { if (theme.resultCard) eventEl.classList.add('event--card'); },
+      });
+    } else await playGacha(playEl, rolls[i], { speed });
+    addChip(rolls[i], { inCard: eventEl.classList.contains('event--card') });
     await sleep(RESULT_HOLD_MS);
     if (i < rolls.length - 1) await sleep(ROLL_GAP_MS);
   }

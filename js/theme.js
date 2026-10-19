@@ -13,6 +13,8 @@
 // ============================================================
 import { rarityColor } from './visual.js';
 import { setPhrased } from './text.js';
+import { parseOrb, ORB_PARTS } from './orb.js';
+import { parseResultCard, RESULT_CARD_RARITIES } from './result-card.js';
 
 const THEMES_BASE = new URL('../images/themes/', import.meta.url);
 
@@ -123,6 +125,10 @@ export async function loadTheme(name) {
     images: Object.fromEntries(Object.entries(manifest.images || {})
       .filter(([k]) => k !== 'rarity')
       .map(([k, v]) => [k, url(v)])),
+    orbParts: null, // 宝珠の部品の URL。全画像が揃うまでは null(従来の開封画像に戻す)
+    orbFixes: {},   // 素材の切れ端を隠す暫定の補正(js/orb.js)
+    orbRarity: {},  // レア度ごとに開いたときに出す光の部品
+    resultCard: null, // レア度ごとの結果カード(js/result-card.js)。4枚そろわなければ null(従来の札)
     rarity: Object.fromEntries(Object.entries((manifest.images || {}).rarity || {}).map(([k, v]) => [k.toUpperCase(), url(v)])),
     icons: (manifest.icons || []).map((i) => ({ src: url(i.file), words: i.words || [] })),
     geometry: manifest.geometry || {},
@@ -134,12 +140,26 @@ export async function loadTheme(name) {
   };
 
   const styles = [manifest.css ? url(manifest.css) : null, ...(manifest.fonts || [])].filter(Boolean);
-  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src)];
+  const orb = parseOrb(manifest);
+  const orbUrls = Object.fromEntries(Object.entries(orb.files).map(([key, file]) => [key, url(file)]));
+  const resultCard = parseResultCard(manifest);
+  const cardFrameUrls = resultCard ? Object.fromEntries(Object.entries(resultCard.frames).map(([k, f]) => [k, url(f)])) : {};
+  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src), ...Object.values(orbUrls), ...Object.values(cardFrameUrls)];
   const [, loaded] = await Promise.all([
     Promise.all(styles.map(loadStylesheet)),
     Promise.all(allImages.map(async (src) => [src, await loadImage(src)])),
   ]);
   const imgs = new Map(loaded);
+  // 透過パーツが揃わない状態で半端な開封をしない。全7枚が読み込めた場合のみ有効。
+  if (ORB_PARTS.every((key) => orbUrls[key] && imgs.get(orbUrls[key]))) {
+    theme.orbParts = orbUrls;
+    theme.orbFixes = orb.fixes;
+    theme.orbRarity = orb.rarity;
+  }
+  if (resultCard && RESULT_CARD_RARITIES.every((k) => imgs.get(cardFrameUrls[k]))) {
+    const first = imgs.get(cardFrameUrls.N);
+    theme.resultCard = { ...resultCard, frames: cardFrameUrls, aspect: first.naturalWidth / first.naturalHeight };
+  }
 
   // 札の窓・リングの穴の位置(theme.json で "auto" なら画像から測る)
   const g = theme.geometry;
@@ -213,6 +233,17 @@ export async function loadTheme(name) {
   const banner = imgs.get(theme.images.titleBanner);
   css.setProperty('--title-aspect', banner && banner.naturalHeight ? String(banner.naturalWidth / banner.naturalHeight) : '3.39');
   css.setProperty('--result-aspect', ratio(theme.images.resultFrame, '940 / 440'));
+
+  // レア度ごとの結果カード: 文字を置く場所(画像に対する %)と札の大きさ
+  if (theme.resultCard) {
+    const rc = theme.resultCard;
+    css.setProperty('--rc-h', `${rc.height}px`);
+    css.setProperty('--rc-aspect', String(rc.aspect));
+    for (const [name2, b] of [['label', rc.label], ['sub', rc.sub]]) {
+      if (!b) continue;
+      for (const side of ['left', 'right', 'top', 'bottom']) css.setProperty(`--rc-${name2}-${side}`, `${b[side]}%`);
+    }
+  }
 
   document.body.classList.add('theme-image', `theme-${name}`);
   if (document.fonts) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]);

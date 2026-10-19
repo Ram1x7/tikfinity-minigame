@@ -502,3 +502,160 @@
   .theme-wafu .event__title.sheen::after,
   .theme-wafu .img-card.sheen::after { animation: none; }
 }
+
+/* ================================================================
+ * 第2段階: 7枚の透過PNGを用いた宝珠の分割開封
+ * パーツが欠けている場合は JS 側が従来の capsule 画像に戻す。
+ * 位置は 500px の箱に対する割合。上蓋の開いた位置は js/play-gacha-image.js の動きで決める。
+ * 素材の切れ端を隠す補正(clip / softEdge)は theme.json の orbParts に画像ごとに書く。
+ * ================================================================ */
+.theme-wafu .wafu-orb {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  pointer-events: none;
+  isolation: isolate;
+}
+.theme-wafu .wafu-orb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.theme-wafu .wafu-orb > .wafu-orb__closed { z-index: 5; }
+.theme-wafu .wafu-orb > .wafu-orb__base { z-index: 2; opacity: 0; }
+.theme-wafu .wafu-orb > .wafu-orb__lid { z-index: 4; opacity: 0; }
+/* 光球: 下半球の口(箱の上から 40% あたり)から出てくる */
+.theme-wafu .wafu-orb > .wafu-orb__core { z-index: 3; opacity: 0; width: 62%; height: 62%; left: 19%; top: 9%; }
+/* 光の輪 */
+.theme-wafu .wafu-orb > .wafu-orb__energy {
+  z-index: 6; opacity: 0;
+  width: 125%; height: 125%; left: -12.5%; top: -22.5%;
+  mix-blend-mode: screen;
+}
+/* 花びら・きらめき・金粉(きらめきの画像をもう1枚) */
+.theme-wafu .wafu-orb > .wafu-orb__petals,
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust {
+  z-index: 7; opacity: 0;
+  width: 122%; height: 122%; left: -11%; top: -16%;
+}
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust { mix-blend-mode: screen; }
+/* 画像の端まで描かれた絵(横長 4:3)が直線で切れて見えないよう、周りをぼかす(theme.json の softEdge) */
+.theme-wafu .wafu-orb > .wafu-orb__soft {
+  -webkit-mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+}
+
+/* 光(放射状のグラデーション)。filter を使わず、不透明度だけを動かす(iPad の負荷対策) */
+.theme-wafu .wafu-orb__aura {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+/* 開く前の紫の予兆(SR・SSR で同じ) */
+.theme-wafu .wafu-orb__aura--omen,
+.theme-wafu .wafu-orb[data-rarity="SR"] .wafu-orb__aura--open {
+  background: radial-gradient(circle, rgba(214, 170, 255, 0.85) 0%, rgba(143, 65, 225, 0.5) 35%, transparent 68%);
+}
+
+/* ---- レア度ごとの開封の光(出す部品は theme.json の orbRarity) ----
+ * N   白銀の控えめな光粒。桜は出さない
+ * R   水色・緑の光と小さな光の輪
+ * SR  紫の光と桜の花びら
+ * SSR 開く前は SR と同じ紫、開いたときに金へ昇格。金粉・桜・光を最も豪華に
+ * 画像の色は静止した filter で変える(動かすのは不透明度と位置だけ) */
+.theme-wafu .wafu-orb[data-rarity="N"] .wafu-orb__aura--open {
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, rgba(205, 214, 228, 0.3) 35%, transparent 66%);
+}
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__core { filter: grayscale(1) brightness(1.2); scale: 0.7; }
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__sparkles { filter: grayscale(1) brightness(1.6); scale: 0.75; }
+
+.theme-wafu .wafu-orb[data-rarity="R"] .wafu-orb__aura--open {
+  inset: -8%;
+  background: radial-gradient(circle, rgba(220, 255, 250, 0.8) 0%, rgba(80, 210, 200, 0.45) 35%, transparent 66%);
+}
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__core { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.2) brightness(1.1); scale: 0.85; }
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.6) brightness(1.2); scale: 0.78; }
+
+.theme-wafu .wafu-orb[data-rarity="SR"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(225deg) saturate(2.4) brightness(1.15); }
+
+.theme-wafu .wafu-orb[data-rarity="SSR"] .wafu-orb__aura--open {
+  inset: -24%;
+  background: radial-gradient(circle, rgba(255, 246, 220, 0.95) 0%, rgba(255, 204, 91, 0.65) 35%, transparent 68%);
+}
+.theme-wafu .wafu-orb[data-rarity="SSR"] > .wafu-orb__dust { scale: -1.25 1.25; } /* 左右を反転して大きく重ね、金粉を密にする */
+
+/* 札が出たあとの粒(js/effects.js の fx__gold)をレア度の色にする。SSR は金のまま */
+.theme-wafu .fx[data-rarity="N"] .fx__gold { background: linear-gradient(135deg, #ffffff, #d5dce8 60%, #8e98aa); }
+.theme-wafu .fx[data-rarity="R"] .fx__gold { background: linear-gradient(135deg, #f0fffb, #74d9c9 60%, #2f8f78); }
+.theme-wafu .fx[data-rarity="SR"] .fx__gold { background: linear-gradient(135deg, #fbf1ff, #c49af0 60%, #7a45b8); }
+
+/* ================================================================
+ * 第2段階: レア度ごとの結果カード(theme.json の resultCard)
+ * 枠の内側は濃い色なので、文字は明るい色にする。文字の場所は画像に対する %
+ * (--rc-label-* / --rc-sub-*。js/theme.js が theme.json から入れる)
+ * ================================================================ */
+.theme-wafu .img-card--framed {
+  --card-h: var(--rc-h, 880px);
+  aspect-ratio: var(--rc-aspect, 5 / 6);
+}
+.theme-wafu .img-card--framed[data-rarity] .img-card__window {
+  left: var(--rc-label-left, 17.5%);
+  right: var(--rc-label-right, 17.5%);
+  top: var(--rc-label-top, 21%);
+  bottom: var(--rc-label-bottom, 42%);
+  padding: 0;
+  gap: 14px;
+  background: none;
+  box-shadow: none;
+}
+.theme-wafu .img-card--framed .img-card__label {
+  padding: 0;
+  color: #fff6dc;
+  /* 枠の内側の濃い色の上で読みやすく。金の縁取りの代わりに影 */
+  text-shadow: 0 3px 0 rgba(8, 12, 30, 0.85), 0 0 18px rgba(8, 12, 30, 0.9);
+  line-height: 1.3;
+}
+.theme-wafu .img-card--framed[data-rarity="SSR"] .img-card__label { color: #ffe9a8; }
+.theme-wafu .img-card--framed .img-card__icon {
+  width: 84px;
+  height: 84px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+}
+.theme-wafu .img-card__sub {
+  position: absolute;
+  left: var(--rc-sub-left, 19%);
+  right: var(--rc-sub-right, 19%);
+  top: var(--rc-sub-top, 73.5%);
+  bottom: var(--rc-sub-bottom, 19%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-wafu .img-card__sub-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #f3e3b3;
+  font-weight: 900;
+  line-height: 1.2;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+
+/* 結果カードが出ているあいだは、送信者名・景品名・レア度をカードの中だけに出す
+ * (.event--card は js/display.js が、レア度ごとの結果カードを使う和風ガチャのときだけ付ける)。
+ *   - 見出しの送信者名: 宝珠の開封中は出し、カードが出たら薄く消す(場所は残して札の位置を動かさない)
+ *   - 結果の一覧: カードに出ている最新の1件だけ隠す(次の抽選が始まったら一覧に出る) */
+.theme-wafu .event__sender { transition: opacity 0.3s ease; }
+.theme-wafu .event--card .event__sender { opacity: 0; }
+.theme-wafu .event__results .chip--in-card { display: none; }

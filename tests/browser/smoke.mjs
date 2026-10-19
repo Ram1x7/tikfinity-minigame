@@ -359,6 +359,115 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(和風): 宝珠の分割開封(7枚そろえば使う。1枚でも欠ければ従来の玉) ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SSR&speed=2`);
+    await page.waitForSelector('.wafu-orb', { timeout: 20000 });
+    assert.equal(await page.locator('.wafu-orb > img').count(), 8, 'SSR は7枚の部品と金粉(きらめきをもう1枚)');
+    assert.equal(await page.locator('.img-gacha__capsule').count(), 0, '従来の玉は出さない');
+    // 開き切ったところで止めて、上蓋・光球・SSR の金色を確かめる
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.wafu-orb__sparkles')).opacity > 0.95, null, { timeout: 20000, polling: 20 });
+    await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()));
+    const o = await page.evaluate(() => {
+      const rect = (k) => document.querySelector(`.wafu-orb__${k}`).getBoundingClientRect();
+      const op = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return {
+        lid: rect('lid'), base: rect('base'),
+        core: op('.wafu-orb__core'), closed: op('.wafu-orb__closed'),
+        gold: op('.wafu-orb__aura--open'), purple: op('.wafu-orb__aura--omen'),
+        layers: [...document.querySelectorAll('.wafu-orb > img')].map((e) => e.className.split(' ')[0].replace('wafu-orb__', '')),
+        clip: getComputedStyle(document.querySelector('.wafu-orb__base')).clipPath,
+      };
+    });
+    assert.ok(o.lid.top < o.base.top - o.base.height * 0.3, `上蓋が下半球の上へ開いている: ${o.lid.top} / ${o.base.top}`);
+    assert.ok(o.lid.left > o.base.left, '上蓋は右奥へ開く');
+    assert.ok(o.core > 0.9 && o.closed < 0.05, `光球が見え、閉じた玉は消えている: ${o.core} / ${o.closed}`);
+    assert.ok(o.gold > 0.9 && o.purple < 0.3, `SSR は紫から金へ: 金 ${o.gold} 紫 ${o.purple}`);
+    assert.deepEqual(o.layers, ['closed', 'base', 'lid', 'core', 'energy', 'petals', 'sparkles', 'dust'], 'SSR は金粉まで全部');
+    assert.equal(o.clip, 'inset(0px 0px 0px 7%)', '素材の切れ端の補正は theme.json から');
+    assert.deepEqual(errors, []);
+    await page.close();
+
+    // N は白銀の光粒だけ(桜・光の輪は出さない)。開く前の紫の予兆も出さない
+    const n = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await n.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await n.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=N&speed=2`);
+    await n.waitForSelector('.wafu-orb', { timeout: 20000 });
+    const nLayers = await n.evaluate(() => [...document.querySelectorAll('.wafu-orb > img')].map((e) => e.className.split(' ')[0].replace('wafu-orb__', '')));
+    assert.deepEqual(nLayers, ['closed', 'base', 'lid', 'core', 'sparkles'], `N の部品: ${nLayers}`);
+    await n.waitForFunction(() => getComputedStyle(document.querySelector('.wafu-orb__sparkles')).opacity > 0.95, null, { timeout: 20000, polling: 20 });
+    assert.ok(Number(await n.evaluate(() => getComputedStyle(document.querySelector('.wafu-orb__aura--omen')).opacity)) < 0.01, 'N は紫の予兆なし');
+    // 札が出たあとの演出にも桜は出さない
+    await n.waitForSelector('.fx', { timeout: 20000 });
+    assert.equal(await n.locator('.fx__petal').count(), 0, 'N は桜なし');
+    assert.equal(await n.evaluate(() => document.querySelector('.fx').dataset.rarity), 'N');
+    await n.close();
+
+    // 部品が1枚でも読めなければ、従来の玉の画像で演出する
+    const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await fb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await fb.route('**/orb-core.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await fb.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SSR&speed=4`);
+    await fb.waitForSelector('.img-gacha', { timeout: 20000 });
+    assert.equal(await fb.locator('.wafu-orb').count(), 0, '欠けたら分割開封は使わない');
+    assert.equal(await fb.locator('.img-gacha__capsule').count(), 2, '従来の玉(閉じた・開いた)');
+    await fb.waitForSelector('.img-card.sheen', { timeout: 20000 });
+    await fb.close();
+    // レア度ごとの結果カード: SSR の枠・送信者名(HTML の文字)。バッジは枠の画像に描かれているので重ねない
+    const rcPage = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await rcPage.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await rcPage.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SR&speed=4`);
+    await rcPage.waitForSelector('.img-card.sheen', { timeout: 30000 });
+    const rcm = await rcPage.evaluate(() => {
+      const c = document.querySelector('.img-card');
+      const r = (e) => e.getBoundingClientRect();
+      const play = r(document.querySelector('.event__play'));
+      const cr = r(c);
+      return {
+        framed: c.classList.contains('img-card--framed'),
+        frame: c.querySelector('.img-card__frame').getAttribute('src').split('/').pop(),
+        badge: c.querySelectorAll('.img-card__rarity').length,
+        sub: c.querySelector('.img-card__sub-text')?.textContent,
+        bodyTop: cr.top + cr.height * 0.077, bodyBottom: cr.bottom - cr.height * 0.096, playTop: play.top, playBottom: play.bottom,
+      };
+    });
+    assert.ok(rcm.framed && rcm.frame === 'card-sr.png', `SR の枠: ${rcm.frame}`);
+    assert.equal(rcm.badge, 0, 'HTML のバッジは重ねない');
+    assert.equal(rcm.sub, 'ためしユーザー さん');
+    assert.ok(rcm.bodyTop >= rcm.playTop - 1 && rcm.bodyBottom <= rcm.playBottom + 1, `札の本体が再生の枠に収まる: ${JSON.stringify(rcm)}`);
+    // 結果カードが出たら、送信者名・景品名・レア度はカードの中だけ(見出しの送信者名と一覧の最新の1件は隠す)
+    const visibleChips = () => rcPage.$$eval('.event__results .chip', (els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.textContent));
+    await rcPage.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    await rcPage.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) < 0.05, null, { timeout: 5000 });
+    assert.deepEqual(await visibleChips(), [], '1回目: カードと同じ結果は一覧に出さない');
+    // 2回目の開封中は見出しに送信者名が戻り、1回目の結果が一覧に出る。2回目のカードでは2回目だけ隠す
+    await rcPage.waitForFunction(() => document.getElementById('ev-count').textContent.includes('2 /'), null, { timeout: 30000 });
+    await rcPage.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) > 0.95, null, { timeout: 5000 });
+    assert.deepEqual(await visibleChips(), ['SR魚を3匹釣るまで他の行動禁止']);
+    await rcPage.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 2, null, { timeout: 30000 });
+    assert.deepEqual(await visibleChips(), ['SR魚を3匹釣るまで他の行動禁止'], '2回目: 1回目の結果だけ一覧に残る');
+    await rcPage.close();
+    // 枠が1枚でも読めなければ従来の札
+    const rcFb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await rcFb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await rcFb.route('**/card-ssr.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await rcFb.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SR&speed=4`);
+    await rcFb.waitForSelector('.img-card.sheen', { timeout: 30000 });
+    assert.equal(await rcFb.locator('.img-card--framed').count(), 0, '枠が欠けたら従来の札');
+    assert.equal(await rcFb.locator('.img-card .img-card__rarity').count(), 1, '従来の札はバッジを HTML で出す');
+    // 従来の札では、見出しの送信者名・結果の一覧はこれまでどおり出す
+    await rcFb.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    assert.equal(await rcFb.evaluate(() => document.getElementById('event').classList.contains('event--card')), false);
+    assert.ok(Number(await rcFb.evaluate(() => getComputedStyle(document.getElementById('ev-sender')).opacity)) > 0.95, '従来の札: 見出しの送信者名は出す');
+    assert.equal(await rcFb.locator('.event__results .chip--in-card').count(), 0, '従来の札: 一覧は隠さない');
+    await rcFb.close();
+    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格・N の控えめな光)・レア度ごとの結果カードと、部品が欠けたときの従来演出');
+  }
+
   // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------
   {
     const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
