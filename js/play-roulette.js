@@ -366,8 +366,11 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     const k = ringOverlap != null
       ? Math.min(1, Math.max(0.45, (playH - frameH + frameH * bodyTop) / (ringSize * (1 - ringOverlap))))
       : Math.min(1, Math.max(0.45, (playH - frameH + 70 + Math.round(frameH * bodyTop)) / ringSize));
+    // 和風テーマは結果札の上端が盤面を隠しやすい。
+    // 停止後だけリングを上に寄せ、針と当たり扇形を結果札の上に残す。
+    const wheelLift = theme?.name === 'wafu' ? 105 : 0;
     wheel.animate(
-      [{ transform: 'scale(1)' }, { transform: `scale(${k})` }],
+      [{ transform: 'scale(1)' }, { transform: `translateY(-${wheelLift}px) scale(${k})` }],
       { duration: t(420), easing: 'ease-in-out', fill: 'forwards' }
     );
     await sleep(t(200));
