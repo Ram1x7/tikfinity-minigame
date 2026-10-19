@@ -759,3 +759,13 @@
 .theme-wafu .img-card--framed .img-card__label {
   line-height: 1.2;
 }
+
+/* 和風画像の新しい大きさに合わせて、演出の内部寸法も旧UI程度に圧縮する。
+ * safe による外側の極端な縮小を避け、文字を実サイズで描画する。 */
+.theme-wafu .event__play { height: 690px; }
+.theme-wafu .img-card--framed { --card-h: 700px; }
+.theme-wafu .img-result--banner { width: 780px; }
+.theme-wafu .event__sender { font-size: 52px; }
+.theme-wafu .event__gift { font-size: 36px; }
+.theme-wafu .event__count { font-size: 32px; min-height: 40px; }
+.theme-wafu .event__title { --banner-w: 540px; font-size: 44px; }
