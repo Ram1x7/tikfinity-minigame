@@ -4,11 +4,12 @@
 // 設定は Firebase から読み、保存は Worker 経由で行う(ブラウザから直接は書き込まない)。
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
-import { getEnv, envLabel, urlWithEnv, pageUrl } from './env.js';
-import { isConfigured, loadConfig, watchRecentLog, watchConnection } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose } from './api.js';
+import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
+import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState } from './store.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
+import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
 import {
   sanitizeConfig, probabilities, normalizeGift, DEFAULT_SETTINGS, RARITIES, LIMITS,
 } from '../shared/core.js';
@@ -56,7 +57,7 @@ function toPayload() {
 function renderHeader() {
   const nav = $('env-switch');
   nav.replaceChildren(
-    ...['test', 'prod'].map((e) => h('a', {
+    ...SELECTABLE_ENVS.map((e) => h('a', {
       href: urlWithEnv(e),
       class: `env-switch__item${e === env ? ' is-active' : ''} env-${e}`,
     }, envLabel(e)))
@@ -64,18 +65,22 @@ function renderHeader() {
   $('env-warning').hidden = env !== 'prod';
   $('copy-to-prod').hidden = env !== 'test';
   document.title = `管理画面(${envLabel(env)})`;
+  // プレビューサイトでは、テスト専用の環境につながっていることを示す
+  if (IS_PREVIEW_SITE) nav.append(h('span', { class: 'env-switch__item env-preview' }, 'プレビュー(テスト専用)'));
 }
+
+let currentLayout = loadSavedLayout();
 
 function renderUrls() {
   const { workerUrl } = getConnection();
-  $('url-display').textContent = pageUrl('display.html', { env });
+  showStreamUrl($('url-display'), env, currentLayout); // 画面では合言葉を伏せる
   $('url-webhook').textContent = workerUrl
     ? `${workerUrl}/webhook?env=${env}&k=合言葉`
     : '(先に「接続設定」で Worker の URL を入力してください)';
 }
 
 document.querySelectorAll('[data-copy]').forEach((btn) => {
-  btn.addEventListener('click', () => copyText($(btn.dataset.copy).textContent));
+  btn.addEventListener('click', () => copyText(urlValue($(btn.dataset.copy))));
 });
 
 // ---------------- 接続設定 ----------------
@@ -83,10 +88,13 @@ function renderConnection() {
   const c = getConnection();
   $('conn-url').value = c.workerUrl;
   $('conn-key').value = c.adminKey;
+  $('conn-dk-prod').value = c.displayKeys.prod;
+  $('conn-dk-test').value = c.displayKeys.test;
   const missing = [];
   if (!isConfigured()) missing.push('js/config.js の Firebase 接続情報');
   if (!c.workerUrl) missing.push('Worker の URL');
   if (!c.adminKey) missing.push('管理用の合言葉');
+  if (!c.displayKeys[env]) missing.push(`表示用の合言葉(${envLabel(env)})`);
   $('conn-status').textContent = missing.length ? `未設定: ${missing.join('、')}` : '設定済み';
   if (missing.length) $('conn-card').open = true;
 }
@@ -109,10 +117,44 @@ $('conn-test').addEventListener('click', async () => {
 });
 
 $('conn-save').addEventListener('click', () => {
-  saveConnection({ workerUrl: $('conn-url').value, adminKey: $('conn-key').value });
+  saveConnection({
+    workerUrl: $('conn-url').value,
+    adminKey: $('conn-key').value,
+    displayKeys: { prod: $('conn-dk-prod').value, test: $('conn-dk-test').value },
+  });
   renderConnection();
   renderUrls();
   toast('接続設定を保存しました');
+});
+
+// ---------------- 表示画面の再生担当 ----------------
+let playerState = {};
+function renderPlayer() {
+  const p = playerState.player;
+  const now = Date.now();
+  let text;
+  if (!p) text = '担当なし(次に開いた表示画面が担当になります)';
+  else if (p.expiresAt > now) text = `担当あり: 画面 ${String(p.id).slice(-6)}(${formatTime(p.since)} から。応答あり)`;
+  else text = `担当の応答なし(期限切れ。次に要求した表示画面が引き継ぎます): 画面 ${String(p.id).slice(-6)}`;
+  $('player-status').textContent = text;
+  $('player-release').disabled = !p;
+}
+
+$('player-release').addEventListener('click', async () => {
+  const message = [
+    `${envLabel(env)}の再生担当を外します。`,
+    '・いま再生している表示画面は待機に切り替わり、待機中の別の表示画面が10秒ほどで引き継ぎます。',
+    '・待機中の表示画面が無い場合は、外した画面が30秒後に担当へ戻るまで、最大30秒ほど再生が止まります(その間に届いたギフトは、再開後に順番に再生されます)。',
+    '',
+    'よろしいですか?',
+  ].join('\n');
+  if (!confirm(message)) return;
+  try {
+    const r = await releasePlayer(env);
+    toast(r.released ? '再生担当を外しました' : '担当はいませんでした');
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 // ---------------- ギフト設定 ----------------
@@ -312,6 +354,12 @@ function renderLog(entries) {
 
 // ---------------- 起動 ----------------
 async function start() {
+  // 「表示の調整」は開いたときに組み立てる(プレビューの読み込みを必要な時だけにする)
+  $('layout-card').addEventListener('toggle', () => {
+    if ($('layout-card').open && !$('layout-editor').hasChildNodes()) {
+      initLayoutEditor($('layout-editor'), env, (layout) => { currentLayout = layout; renderUrls(); });
+    }
+  });
   renderHeader();
   renderConnection();
   renderUrls();
@@ -329,6 +377,8 @@ async function start() {
   }
   watchConnection((ok) => { $('log-conn').textContent = ok ? '' : 'Firebase に接続できません'; });
   watchRecentLog(env, 30, renderLog);
+  watchDisplayState(env, (s) => { playerState = s; renderPlayer(); });
+  setInterval(renderPlayer, 5000); // 期限切れの表示を更新する
 }
 
 start();

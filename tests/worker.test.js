@@ -191,6 +191,18 @@ test('古いキューと重複記録を掃除して容量を保つ', async () =>
   assert.equal(fb.get('envs/test/dedupe/old'), null);
 });
 
+test('Webhook は env を省略すると拒否し、どの環境にも書き込まない', async () => {
+  const before = JSON.stringify([fb.get('envs/prod/queue'), fb.get('envs/test/queue')]);
+  const res = await worker.fetch(new Request(`https://w.example.com/webhook?k=hook-secret`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ giftName: 'Rose', msgId: 'no-env-1' }),
+  }), env, ctx);
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /env=prod か env=test/);
+  assert.equal(JSON.stringify([fb.get('envs/prod/queue'), fb.get('envs/test/queue')]), before, 'キューは変わらない');
+  // 空の env も同じ
+  assert.equal((await worker.fetch(new Request('https://w.example.com/webhook?env=&k=hook-secret', { method: 'POST', body: '{}' }), env, ctx)).status, 400);
+});
+
 test('env の指定が不正なら拒否', async () => {
   assert.equal((await webhook({ giftName: 'Rose' }, { envName: 'dev' })).status, 400);
   assert.equal((await admin('/admin/config?env=staging', CONFIG)).status, 400);

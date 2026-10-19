@@ -455,6 +455,242 @@ function createDb(env, fetchImpl = fetch) {
   };
 }
 
+// ---- worker/src/http.js ----
+// ============================================================
+// worker/src/http.js  Worker の応答・合言葉の比較などの小物
+// ============================================================
+
+function reply(cors, status, data) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors },
+  });
+}
+
+/**
+ * この Worker で使ってよい環境の一覧(ALLOWED_ENVS。例 "test")。
+ * 未設定なら null(prod・test の両方を使える。本番の Worker はこれまでどおり)。
+ * 設定されているのに prod・test が1つも書かれていなければ、空の一覧(どの環境も使えない)にする。
+ */
+function allowedEnvs(workerEnv) {
+  const raw = String((workerEnv && workerEnv.ALLOWED_ENVS) || '').trim();
+  if (!raw) return null;
+  return raw.split(',').map((s) => s.trim().toLowerCase()).filter((s) => s === 'prod' || s === 'test');
+}
+
+/** env をこの Worker で使ってよいか(prod / test 以外は常に不可) */
+function envAllowed(workerEnv, envName) {
+  if (envName !== 'prod' && envName !== 'test') return false;
+  const list = allowedEnvs(workerEnv);
+  return list === null || list.includes(envName);
+}
+
+const ENV_DENIED = 'この Worker ではこの環境は使えません(ALLOWED_ENVS)';
+
+/** 長さに依存しない比較(合言葉の総当たり対策) */
+function safeEqual(a, b) {
+  const x = new TextEncoder().encode(String(a || ''));
+  const y = new TextEncoder().encode(String(b || ''));
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
+  return diff === 0 && x.length > 0;
+}
+
+// ---- worker/src/display.js ----
+// ============================================================
+// worker/src/display.js  表示画面の「再生担当」と再生位置の保存
+// ------------------------------------------------------------
+// 再生位置(envs/{env}/state/display)はブラウザから直接書き込めないようにし、
+// 表示用の合言葉(本番 DISPLAY_KEY_PROD / テスト DISPLAY_KEY_TEST)を持つ表示画面から、
+// この Worker 経由でだけ更新する。
+//
+// 同時に再生できる表示画面は環境ごとに1つ(再生担当)。
+//   POST /display/claim?env=      担当になる(空いていれば担当、使用中なら待機)
+//   POST /display/heartbeat?env=  担当の更新(10秒ごと)。担当でなければ 409
+//   POST /display/cursor?env=     再生位置の保存。担当からの要求だけ受け付ける
+//   POST /display/release?env=    担当を降りる(ページを閉じる時)
+//   POST /admin/display/release?env=  管理画面から担当を外す(次に要求した画面が担当になる)
+// 本文は JSON(Content-Type: text/plain でも可)。{ dk: 表示用の合言葉, id: 画面のID, token, key }
+//
+// 担当の状態は state/display/player に { id, tokenHash, gen, since, expiresAt } で持つ。
+//   - 担当が動いている(期限内)あいだは、別の画面に担当を渡さない
+//   - 30秒更新が無ければ期限切れとなり、次に要求した画面が引き継ぐ
+//   - 再読み込みした画面は、前回受け取った token を出せば待たずに担当へ戻れる。
+//     画面ID だけでは戻れない(token は担当になった時にその画面にだけ渡し、Worker は SHA-256 だけを保存)。
+//     戻るたびに token を新しくするので、古い token の写しは使えなくなる
+// 担当の入れ替えと再生位置の保存が同時に起きても、ETag 付きの書き込みでどちらか一方だけが通る。
+// 管理画面から外された画面は、30秒間は担当に戻れない(待機中の別の画面に確実に切り替えるため)。
+// ============================================================
+
+
+const PLAYER_TTL_MS = 30 * 1000;   // 更新が無ければ担当が切れるまでの時間
+const HEARTBEAT_MS = 10 * 1000;    // 担当の更新間隔(表示画面に伝える)
+const STANDBY_POLL_MAX_MS = 10 * 1000;    // 待機中の画面が担当を確認し直す間隔の上限
+const CAS_TRIES = 5;
+
+const ID_RE = /^[A-Za-z0-9_-]{8,40}$/;
+const TOKEN_RE = /^[A-Za-z0-9_-]{20,100}$/;
+const QUEUE_KEY_RE = /^-[0-9A-Za-z_-]{8,40}$/;
+
+/** 環境ごとの表示用の合言葉の名前(本番とテストで別々) */
+function displayKeyName(envName) {
+  return envName === 'prod' ? 'DISPLAY_KEY_PROD' : 'DISPLAY_KEY_TEST';
+}
+
+function tokenB64url(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function randomToken() {
+  return tokenB64url(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * 担当になる要求への判断(DB に依存しない。テスト用に公開)。
+ *   resume  … 同じ画面が正しい token で戻ってきた
+ *   claim   … 担当がいない・期限切れなので新しく担当になる
+ *   standby … 担当が動いているので待つ(retryAfterMs 後に確認し直す)
+ */
+function decideClaim(player, { id, tokenHash }, nowMs, released = null) {
+  const standby = (until) => ({
+    action: 'standby',
+    retryAfterMs: Math.max(2000, Math.min(STANDBY_POLL_MAX_MS, Number(until) - nowMs + 500)),
+  });
+  if (player && tokenHash && player.id === id && safeEqual(player.tokenHash, tokenHash)) return { action: 'resume' };
+  if (player && Number(player.expiresAt) > nowMs) return standby(player.expiresAt);
+  // 管理画面から外された画面は、しばらくのあいだ担当に戻れない
+  if (released && released.id === id && Number(released.until) > nowMs) return standby(released.until);
+  return { action: 'claim' };
+}
+
+/** 要求してきた画面が今の担当か(期限切れでも、まだ誰にも引き継がれていなければ担当のまま) */
+function isHolder(player, id, tokenHash) {
+  return Boolean(player && tokenHash && player.id === id && safeEqual(player.tokenHash, tokenHash));
+}
+
+/**
+ * 読んだ値をもとに書き込む。他で先に書き換えられていたら読み直してやり直す。
+ * fn(value) は { write?, result } を返す(write が無ければ書き込まない)。
+ */
+async function updateDisplayState(db, path, fn) {
+  for (let i = 0; i < CAS_TRIES; i++) {
+    const { value, etag } = await db.getWithEtag(path);
+    const out = fn(value && typeof value === 'object' ? value : {});
+    if (out.write === undefined) return out.result;
+    if (await db.putIfMatch(path, out.write, etag)) return out.result;
+  }
+  throw new Error('再生担当の更新が混み合っています。少し待ってからやり直してください');
+}
+
+async function readDisplayBody(request) {
+  try {
+    const v = JSON.parse(await request.text());
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+const notHolder = (cors) => reply(cors, 409, { lost: true, error: '再生担当ではありません(別の表示画面が担当しています)' });
+
+async function handleDisplay(request, env, db, url, cors) {
+  const envName = url.searchParams.get('env');
+  if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+  if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+  const body = await readDisplayBody(request);
+  const keyName = displayKeyName(envName);
+  if (!env[keyName] || !String(env[keyName]).trim()) {
+    return reply(cors, 503, { error: `${keyName} が Worker に設定されていません` });
+  }
+  if (!safeEqual(body.dk, env[keyName])) return reply(cors, 401, { error: '表示用の合言葉が違います' });
+  const id = String(body.id || '');
+  if (!ID_RE.test(id)) return reply(cors, 400, { error: '画面の ID が不正です' });
+  const tokenHash = TOKEN_RE.test(String(body.token || '')) ? await sha256Hex(body.token) : '';
+
+  const path = `envs/${envName}/state/display`;
+  const now = Date.now();
+
+  if (url.pathname === '/display/claim') {
+    const token = randomToken();
+    const newHash = await sha256Hex(token);
+    const result = await updateDisplayState(db, path, (st) => {
+      const p = st.player || null;
+      const d = decideClaim(p, { id, tokenHash }, now, st.released);
+      if (d.action === 'standby') {
+        return { result: { role: 'standby', retryAfterMs: d.retryAfterMs, holder: p ? { since: p.since, expiresAt: p.expiresAt } : null } };
+      }
+      const player = {
+        id,
+        tokenHash: newHash,
+        gen: (Number(p && p.gen) || 0) + 1,
+        since: d.action === 'resume' ? p.since : now,
+        expiresAt: now + PLAYER_TTL_MS,
+      };
+      return {
+        write: { ...st, player, released: null },
+        result: {
+          role: 'player', resumed: d.action === 'resume', token, gen: player.gen,
+          cursor: st.lastPlayedKey || null, ttlMs: PLAYER_TTL_MS, heartbeatMs: HEARTBEAT_MS,
+        },
+      };
+    });
+    return reply(cors, 200, result);
+  }
+
+  if (url.pathname === '/display/heartbeat') {
+    const result = await updateDisplayState(db, path, (st) => {
+      if (!isHolder(st.player, id, tokenHash)) return { result: null };
+      const player = { ...st.player, expiresAt: now + PLAYER_TTL_MS };
+      return { write: { ...st, player }, result: { ok: true, expiresAt: player.expiresAt } };
+    });
+    return result ? reply(cors, 200, result) : notHolder(cors);
+  }
+
+  if (url.pathname === '/display/cursor') {
+    const key = String(body.key || '');
+    if (!QUEUE_KEY_RE.test(key)) return reply(cors, 400, { error: '再生位置の形式が不正です' });
+    // 実在するキュー項目の位置だけを受け付ける
+    const exists = await db.get(`envs/${envName}/queue/${key}`, { shallow: 'true' });
+    if (exists === null || exists === undefined) return reply(cors, 400, { error: 'キューに無い再生位置です' });
+    const result = await updateDisplayState(db, path, (st) => {
+      if (!isHolder(st.player, id, tokenHash)) return { result: null };
+      // 再生位置は戻さない(再送や順番の入れ替わりで古い位置が届いても無視する)
+      if (st.lastPlayedKey && key <= st.lastPlayedKey) return { result: { ok: true, ignored: key < st.lastPlayedKey ? 'older' : 'same' } };
+      const player = { ...st.player, expiresAt: now + PLAYER_TTL_MS };
+      return { write: { ...st, lastPlayedKey: key, updatedAt: now, player }, result: { ok: true, saved: key } };
+    });
+    return result ? reply(cors, 200, result) : notHolder(cors);
+  }
+
+  if (url.pathname === '/display/release') {
+    const result = await updateDisplayState(db, path, (st) => {
+      if (!isHolder(st.player, id, tokenHash)) return { result: null };
+      return { write: { ...st, player: null }, result: { ok: true } };
+    });
+    return result ? reply(cors, 200, result) : notHolder(cors);
+  }
+
+  return reply(cors, 404, { error: 'not found' });
+}
+
+/** 管理画面から担当を外す(再生位置はそのまま)。待機中の画面が次の確認で担当になる */
+function releaseByAdmin(db, envName) {
+  const now = Date.now();
+  return updateDisplayState(db, `envs/${envName}/state/display`, (st) => (st.player
+    ? {
+      write: { ...st, player: null, released: { id: st.player.id, until: now + PLAYER_TTL_MS } },
+      result: { ok: true, released: true, previous: { since: st.player.since, expiresAt: st.player.expiresAt } },
+    }
+    : { result: { ok: true, released: false } }));
+}
+
 // ---- worker/src/index.js ----
 // ============================================================
 // worker/src/index.js  (Cloudflare Worker)
@@ -463,12 +699,15 @@ function createDb(env, fetchImpl = fetch) {
 //
 // 【エンドポイント】
 //   GET  /                         動作確認用
-//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信
+//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信(env=prod / env=test の指定は必須)
 //   POST /admin/config?env=        設定(ギフト・抽選テーブル・全体設定)を保存
 //   POST /admin/test-gift?env=     テスト用の疑似ギフト(Webhookと同じ処理を通す)
 //   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
 //   POST /admin/copy-config?from=test&to=prod   設定のコピー
+//   POST /admin/display/release?env=   表示画面の再生担当を外す(別の画面に切り替える)
 //   (/admin/* は X-Admin-Key ヘッダーが必要)
+//   POST /display/claim|heartbeat|cursor|release?env=   表示画面の再生担当・再生位置(worker/src/display.js)
+//   (/display/* は表示用の合言葉 DISPLAY_KEY_PROD / DISPLAY_KEY_TEST が必要)
 //
 // 【Worker の環境変数(シークレット)】
 //   FIREBASE_DB_URL   例: https://xxxx-default-rtdb.firebaseio.com
@@ -476,8 +715,14 @@ function createDb(env, fetchImpl = fetch) {
 //   SA_PRIVATE_KEY    サービスアカウントの private_key (PEM)
 //   WEBHOOK_KEY       TikFinity の Webhook URL に付ける合言葉
 //   ADMIN_KEY         管理画面・テスト画面で使う合言葉
+//   DISPLAY_KEY_PROD  本番の表示画面(PRISM に設定する URL)に付ける合言葉
+//   DISPLAY_KEY_TEST  テストの表示画面に付ける合言葉(本番と別の値にする)
 //   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
+//   ALLOWED_ENVS      (任意) この Worker で使える環境。テスト専用の Worker では "test" にする。
+//                     一覧に無い環境(env=prod など)への要求は、Webhook・管理・表示のすべてで 403 にする
 // ============================================================
+
+
 
 
 
@@ -485,9 +730,9 @@ const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-const WORKER_VERSION = '1.1.0';
+const WORKER_VERSION = '1.4.0';
 
-const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY'];
+const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
 /**
  * ALLOWED_ORIGIN をオリジン(https://ホスト名)の一覧に直す。
@@ -517,25 +762,9 @@ function corsHeaders(env, request) {
   };
 }
 
-function reply(cors, status, data) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors },
-  });
-}
-
 /** どのシークレットが設定されているか(値そのものは返さない) */
 function secretStatus(env) {
   return Object.fromEntries(SECRET_NAMES.map((n) => [n, Boolean(env[n] && String(env[n]).trim())]));
-}
-
-/** 長さに依存しない比較(合言葉の総当たり対策) */
-function safeEqual(a, b) {
-  const x = new TextEncoder().encode(String(a || ''));
-  const y = new TextEncoder().encode(String(b || ''));
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
-  return diff === 0 && x.length > 0;
 }
 
 /** クエリ・form・JSON のどれで届いても平たいオブジェクトにまとめる */
@@ -687,7 +916,9 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   if (path === '/admin/ping') {
     // 接続テスト用: サービスアカウントで Firebase を読めるかまで確認する
     try {
-      await db.get('envs/test/config', { shallow: 'true' });
+      // 使える環境のうち1つを読む(テスト専用の Worker なら test)
+      const pingEnv = (allowedEnvs(env) || ['test'])[0] || 'test';
+      await db.get(`envs/${pingEnv}/config`, { shallow: 'true' });
       return reply(cors, 200, { ok: true, version: WORKER_VERSION, firebase: 'ok' });
     } catch (err) {
       return reply(cors, 200, { ok: false, version: WORKER_VERSION, firebase: String(err.message || err) });
@@ -698,6 +929,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (!isEnv(from) || !isEnv(to) || from === to) return reply(cors, 400, { error: 'from/to が不正です' });
+    if (!envAllowed(env, from) || !envAllowed(env, to)) return reply(cors, 403, { error: ENV_DENIED });
     const config = await db.get(`envs/${from}/config`);
     await db.put(`envs/${to}/config`, config || {});
     return reply(cors, 200, { ok: true });
@@ -705,6 +937,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
 
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+  if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
 
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
@@ -718,6 +951,10 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     const result = await processGift(db, envName, body || {}, 'test');
     ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
     return reply(cors, 200, result);
+  }
+
+  if (path === '/admin/display/release') {
+    return reply(cors, 200, await releaseByAdmin(db, envName));
   }
 
   if (path === '/admin/clear') {
@@ -743,6 +980,8 @@ export default {
         version: WORKER_VERSION,
         secrets: secretStatus(env),
         allowedOrigins: allowedOrigins(env.ALLOWED_ORIGIN),
+        // この Worker で使える環境(null なら制限なし)
+        allowedEnvs: allowedEnvs(env),
       });
     }
     if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
@@ -754,13 +993,21 @@ export default {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
           return reply(cors, 401, { error: 'Webhook の合言葉が違います' });
         }
-        const envName = url.searchParams.get('env') || 'prod';
-        if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+        // env を省略したときに本番へ書き込まないよう、prod / test の明示を必須にする
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) {
+          return reply(cors, 400, { error: 'Webhook の URL に env=prod か env=test を付けてください(省略はできません)' });
+        }
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
+      }
+
+      if (url.pathname.startsWith('/display/')) {
+        return await handleDisplay(request, env, db, url, cors);
       }
 
       if (url.pathname.startsWith('/admin/')) {

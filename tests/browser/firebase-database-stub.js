@@ -126,7 +126,7 @@ window.__fakeDb = {
   get: getAt,
   set: writeAt,
   push(path, value) {
-    const key = `-T${String(++seq).padStart(6, '0')}`;
+    const key = `-T${String(++seq).padStart(10, '0')}`;
     sessionStorage.setItem(STORE + 'Seq', String(seq));
     writeAt(`${path}/${key}`, value);
     return key;

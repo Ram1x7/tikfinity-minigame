@@ -5,12 +5,15 @@
 //
 // 【エンドポイント】
 //   GET  /                         動作確認用
-//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信
+//   POST /webhook?env=prod&k=鍵     TikFinity からのギフト受信(env=prod / env=test の指定は必須)
 //   POST /admin/config?env=        設定(ギフト・抽選テーブル・全体設定)を保存
 //   POST /admin/test-gift?env=     テスト用の疑似ギフト(Webhookと同じ処理を通す)
 //   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
 //   POST /admin/copy-config?from=test&to=prod   設定のコピー
+//   POST /admin/display/release?env=   表示画面の再生担当を外す(別の画面に切り替える)
 //   (/admin/* は X-Admin-Key ヘッダーが必要)
+//   POST /display/claim|heartbeat|cursor|release?env=   表示画面の再生担当・再生位置(worker/src/display.js)
+//   (/display/* は表示用の合言葉 DISPLAY_KEY_PROD / DISPLAY_KEY_TEST が必要)
 //
 // 【Worker の環境変数(シークレット)】
 //   FIREBASE_DB_URL   例: https://xxxx-default-rtdb.firebaseio.com
@@ -18,7 +21,11 @@
 //   SA_PRIVATE_KEY    サービスアカウントの private_key (PEM)
 //   WEBHOOK_KEY       TikFinity の Webhook URL に付ける合言葉
 //   ADMIN_KEY         管理画面・テスト画面で使う合言葉
+//   DISPLAY_KEY_PROD  本番の表示画面(PRISM に設定する URL)に付ける合言葉
+//   DISPLAY_KEY_TEST  テストの表示画面に付ける合言葉(本番と別の値にする)
 //   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
+//   ALLOWED_ENVS      (任意) この Worker で使える環境。テスト専用の Worker では "test" にする。
+//                     一覧に無い環境(env=prod など)への要求は、Webhook・管理・表示のすべてで 403 にする
 // ============================================================
 
 import {
@@ -31,14 +38,16 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
+import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
+import { handleDisplay, releaseByAdmin } from './display.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WORKER_VERSION = '1.1.0';
+export const WORKER_VERSION = '1.4.0';
 
-const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY'];
+const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
 /**
  * ALLOWED_ORIGIN をオリジン(https://ホスト名)の一覧に直す。
@@ -68,25 +77,9 @@ function corsHeaders(env, request) {
   };
 }
 
-function reply(cors, status, data) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors },
-  });
-}
-
 /** どのシークレットが設定されているか(値そのものは返さない) */
 function secretStatus(env) {
   return Object.fromEntries(SECRET_NAMES.map((n) => [n, Boolean(env[n] && String(env[n]).trim())]));
-}
-
-/** 長さに依存しない比較(合言葉の総当たり対策) */
-function safeEqual(a, b) {
-  const x = new TextEncoder().encode(String(a || ''));
-  const y = new TextEncoder().encode(String(b || ''));
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
-  return diff === 0 && x.length > 0;
 }
 
 /** クエリ・form・JSON のどれで届いても平たいオブジェクトにまとめる */
@@ -238,7 +231,9 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   if (path === '/admin/ping') {
     // 接続テスト用: サービスアカウントで Firebase を読めるかまで確認する
     try {
-      await db.get('envs/test/config', { shallow: 'true' });
+      // 使える環境のうち1つを読む(テスト専用の Worker なら test)
+      const pingEnv = (allowedEnvs(env) || ['test'])[0] || 'test';
+      await db.get(`envs/${pingEnv}/config`, { shallow: 'true' });
       return reply(cors, 200, { ok: true, version: WORKER_VERSION, firebase: 'ok' });
     } catch (err) {
       return reply(cors, 200, { ok: false, version: WORKER_VERSION, firebase: String(err.message || err) });
@@ -249,6 +244,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (!isEnv(from) || !isEnv(to) || from === to) return reply(cors, 400, { error: 'from/to が不正です' });
+    if (!envAllowed(env, from) || !envAllowed(env, to)) return reply(cors, 403, { error: ENV_DENIED });
     const config = await db.get(`envs/${from}/config`);
     await db.put(`envs/${to}/config`, config || {});
     return reply(cors, 200, { ok: true });
@@ -256,6 +252,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
 
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+  if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
 
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
@@ -269,6 +266,10 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     const result = await processGift(db, envName, body || {}, 'test');
     ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
     return reply(cors, 200, result);
+  }
+
+  if (path === '/admin/display/release') {
+    return reply(cors, 200, await releaseByAdmin(db, envName));
   }
 
   if (path === '/admin/clear') {
@@ -294,6 +295,8 @@ export default {
         version: WORKER_VERSION,
         secrets: secretStatus(env),
         allowedOrigins: allowedOrigins(env.ALLOWED_ORIGIN),
+        // この Worker で使える環境(null なら制限なし)
+        allowedEnvs: allowedEnvs(env),
       });
     }
     if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
@@ -305,13 +308,21 @@ export default {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
           return reply(cors, 401, { error: 'Webhook の合言葉が違います' });
         }
-        const envName = url.searchParams.get('env') || 'prod';
-        if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
+        // env を省略したときに本番へ書き込まないよう、prod / test の明示を必須にする
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) {
+          return reply(cors, 400, { error: 'Webhook の URL に env=prod か env=test を付けてください(省略はできません)' });
+        }
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
+      }
+
+      if (url.pathname.startsWith('/display/')) {
+        return await handleDisplay(request, env, db, url, cors);
       }
 
       if (url.pathname.startsWith('/admin/')) {

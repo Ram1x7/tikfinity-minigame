@@ -1,0 +1,732 @@
+/*
+ * 和風テーマ(display.html?theme=wafu)。css/display.css の上に重ねて読み込まれる。
+ * 画像は装飾だけに使い、文字はすべて HTML。ページの背景は透明のまま。
+ *
+ * 画像の位置(札の窓・リングの穴・結果枠の文字の場所など)は theme.json と
+ * 画像の透明部分から js/theme.js が CSS 変数(--card-win-* など)に入れる。
+ * 画像を差し替えるときは、このファイルを触らずに済むようにしている。
+ *
+ * 試作素材の縁に元画像の背景色が薄く残っているため、素材はゲーム画面の上に直接置かず、
+ * 半透明の藍色の台紙(.event)の上に置いている。
+ */
+.theme-wafu {
+  --indigo: #1b2547;
+  --indigo-deep: #121a36;
+  --washi: #f6eedb;
+  --washi-dark: #e9dcbc;
+  --gold: #d6ad52;
+  --gold-deep: #9c7426;
+  --vermilion: #c0392b;
+  --ink: #1b2547;
+  --shadow: 0 12px 0 rgba(10, 14, 32, 0.45);
+}
+
+/* 大きく出るタイトル・送信者名は明朝体。結果など読ませる文字は、圧縮でも崩れにくい太い丸ゴシック */
+.theme-wafu .event__title,
+.theme-wafu .event__sender {
+  font-family: 'Zen Old Mincho', 'Hiragino Mincho ProN', serif;
+  font-weight: 900;
+}
+
+/* ---------------- 台紙 ---------------- */
+.theme-wafu .event {
+  width: 988px;
+  padding: 24px 28px 30px;
+  border-radius: 40px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(214, 173, 82, 0.18), transparent 45%),
+    linear-gradient(180deg, rgba(27, 37, 71, 0.93), rgba(18, 26, 54, 0.93));
+  border: 6px solid var(--gold);
+  outline: 3px solid rgba(18, 26, 54, 0.9);
+  box-shadow: var(--shadow), inset 0 0 0 3px rgba(214, 173, 82, 0.35);
+}
+
+/* ヘッダーの並び順: タイトル帯 → 送信者 → ギフト */
+.theme-wafu .event__head { display: flex; flex-direction: column; align-items: center; }
+.theme-wafu .event__title { order: 1; }
+.theme-wafu .event__sender { order: 2; }
+.theme-wafu .event__gift { order: 3; }
+
+/* タイトル帯(画像)の上に、タイトルの文字を重ねる */
+.theme-wafu .event__title {
+  /* 高さはタイトル帯画像の縦横比から決める(画像を差し替えても歪まない) */
+  --banner-w: 620px;
+  --banner-h: calc(var(--banner-w) / var(--title-aspect, 3.39));
+  display: block;
+  width: var(--banner-w);
+  height: var(--banner-h);
+  margin: -8px auto 0;
+  /* 帯の飾りを避けて文字を置く範囲(theme.json の titleText) */
+  padding:
+    0
+    calc(var(--banner-w) * var(--title-pad-right, 0.18))
+    calc(var(--banner-h) * var(--title-pad-bottom, 0.07))
+    calc(var(--banner-w) * var(--title-pad-left, 0.18));
+  box-sizing: border-box;
+  background: var(--img-title-banner) center / 100% 100% no-repeat;
+  border: 0;
+  border-radius: 0;
+  color: #fff6dc;
+  font-size: 50px;
+  line-height: calc(var(--banner-h) * (1 - var(--title-pad-bottom, 0.07)));
+  text-align: center;
+  text-shadow: 3px 3px 0 var(--indigo-deep), -3px 3px 0 var(--indigo-deep), 3px -3px 0 var(--indigo-deep), -3px -3px 0 var(--indigo-deep);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.theme-wafu .event__title:empty { display: none; }
+
+.theme-wafu .event__sender {
+  margin-top: 4px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 64px;
+  color: #fffaf0;
+  text-shadow: 4px 4px 0 var(--indigo-deep), -4px 4px 0 var(--indigo-deep), 4px -4px 0 var(--indigo-deep), -4px -4px 0 var(--indigo-deep);
+}
+.theme-wafu .event__gift {
+  font-size: 44px;
+  color: var(--gold);
+}
+.theme-wafu .event__count {
+  margin-top: 4px;
+  font-size: 40px;
+  color: #ffd27a;
+  min-height: 52px;
+}
+.theme-wafu .event__play {
+  height: 760px;
+  margin-top: 0;
+}
+
+/* ---------------- 結果の一覧 ---------------- */
+.theme-wafu .chip {
+  background: var(--washi);
+  border: 5px solid var(--gold);
+  outline: 3px solid var(--indigo-deep);
+  color: var(--indigo);
+  /* --text-boost: コメント欄よけで台紙を縮めたとき、結果の文字だけ大きくする倍率(表示画面が入れる) */
+  font-size: calc(42px * var(--text-boost, 1));
+}
+/* 結果一覧のレア度は、レア度の色の札にする(クリーム色の上でも読めるように) */
+.theme-wafu .chip__rarity {
+  display: inline-block;
+  padding: 0 0.32em;
+  border-radius: 0.35em;
+  background: var(--rarity, var(--gold-deep));
+  color: var(--rarity-ink, #fff);
+  line-height: 1.2;
+}
+
+/* ---------------- 残り件数・TEST 表示 ---------------- */
+.theme-wafu #pending {
+  background: var(--indigo);
+  border: 5px solid var(--gold);
+  color: #fff6dc;
+  font-size: 42px;
+}
+.theme-wafu #env-badge {
+  background: var(--vermilion);
+  border: 4px solid var(--gold);
+}
+
+/* ---------------- ガチャ ---------------- */
+.img-gacha {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.img-gacha__capsule {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  object-fit: contain;
+}
+.img-gacha__glow {
+  position: absolute;
+  width: 680px;
+  height: 680px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6dc 0%, var(--rarity, var(--gold)) 35%, transparent 68%);
+  opacity: 0;
+}
+
+/* 札: 画像の窓(透明部分)の位置は js/theme.js が測って --card-win-* に入れる */
+/* 札の幅は画像の縦横比で決まる。theme.json の cardWiden で、飾りを歪めずに横へ広げている */
+.img-card {
+  --card-h: 740px;
+  position: absolute;
+  height: var(--card-h);
+  aspect-ratio: var(--card-aspect, 2 / 3);
+  opacity: 0;
+}
+.img-card__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.img-card__window {
+  position: absolute;
+  left: var(--card-win-left, 13.2%);
+  right: var(--card-win-right, 13.2%);
+  top: var(--card-win-top, 22.4%);
+  bottom: var(--card-win-bottom, 15.8%);
+  box-sizing: border-box;
+  /* 左右の余白は小さめにして、結果の文字に幅を回す */
+  padding: 16px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.7), transparent 60%),
+    linear-gradient(180deg, var(--washi), var(--washi-dark));
+}
+.img-card__rarity {
+  width: 250px;
+  height: auto;
+  flex: none;
+}
+.img-card__rarity--text,
+.img-result__rarity--text {
+  width: auto;
+  min-width: 150px;
+  box-sizing: border-box;
+  padding: 4px 30px;
+  border-radius: 999px;
+  /* レア度の色(theme.json の rarityColors)で塗り、金の縁取りでそろえる */
+  background: var(--rarity, var(--indigo));
+  border: 5px solid var(--gold);
+  outline: 3px solid var(--indigo-deep);
+  color: var(--rarity-ink, #fff);
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------- レア度の色(N 灰・R 緑・SR 紫・SSR 金) ----------------
+ * 色そのものは theme.json の rarityColors。ここでは色の上に載せる文字の色だけを決める */
+.theme-wafu [data-rarity] { --rarity-ink: #ffffff; }
+.theme-wafu [data-rarity="SSR"] { --rarity-ink: var(--indigo-deep); }
+
+/* 札の窓のふちに、レア度の色の線を入れる */
+.theme-wafu .img-card[data-rarity] .img-card__window {
+  box-shadow: inset 0 0 0 8px var(--rarity);
+}
+.img-card__label.phrased,
+.img-result__text.phrased { word-break: keep-all; }
+
+.img-card__label {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  /* 左右の飾り(theme.json の cardTextSide)に文字が掛からないようにする */
+  padding: 0 calc(var(--card-h) * var(--card-aspect-num, 0.667) * var(--card-text-inset, 0));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--indigo);
+  font-weight: 900;
+  line-height: 1.25;
+  /* 日本語は文節に近いまとまりの間(js/text.js が入れる <wbr>)でだけ折り返す(.phrased)。
+     Chrome でも iPad の WebKit でも同じ折り返しになる。まとまりが入らないときは fitText が
+     文字を小さくし、最小でも入らなければ途中で折る */
+  word-break: break-word;
+  overflow: hidden;
+}
+.img-card__icon {
+  width: 92px;
+  height: 92px;
+  flex: none;
+}
+
+/* ---------------- ルーレット ---------------- */
+.roulette--image {
+  align-items: flex-start;
+}
+/* リング画像の箱。盤面(canvas)の位置・大きさは js/play-roulette.js が穴に合わせて決める */
+.img-wheel {
+  position: relative;
+  width: var(--ring-size, 760px);
+  height: var(--ring-size, 760px);
+  flex: none;
+  /* 止まった後に小さくするとき、上端の中央(針)を基準にする */
+  transform-origin: 50% 0;
+}
+.img-wheel canvas {
+  position: absolute;
+  margin: 0;
+  /* 回転中は CSS の transform で回す(js/play-roulette.js)。GPU で合成して描き直しを省く */
+  will-change: transform;
+}
+.img-wheel__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.img-wheel__pointer {
+  position: absolute;
+  left: calc(var(--ring-hole-cx, 0.5) * 100% - var(--pointer-width, 12.6%) / 2);
+  top: var(--pointer-top, 0.5%);
+  width: var(--pointer-width, 12.6%);
+  height: auto;
+  filter: drop-shadow(0 6px 0 rgba(10, 14, 32, 0.5));
+}
+/* 候補名は盤面の外(下)に出す */
+.theme-wafu .roulette--ticker-below .roulette__ticker {
+  top: calc(var(--ring-size) + 14px);
+  bottom: auto;
+}
+.theme-wafu .roulette__ticker {
+  bottom: 40px;
+  background: var(--washi);
+  border: 5px solid var(--gold);
+  outline: 3px solid var(--indigo-deep);
+  color: var(--indigo);
+  font-size: calc(54px * var(--text-boost, 1));
+}
+
+/* 結果枠(画像)。文字の場所は theme.json の resultText(右下の扇の飾りを避けている) */
+.img-result {
+  position: relative;
+  width: 720px;
+  aspect-ratio: var(--result-aspect, 940 / 440);
+}
+.roulette--image .roulette__result.img-result {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  opacity: 0;
+}
+.img-result__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.img-result__rarity {
+  position: absolute;
+  left: 50%;
+  top: -50px;
+  width: 210px;
+  transform: translateX(-50%);
+}
+.img-result__text {
+  position: absolute;
+  left: var(--result-text-left, 9%);
+  right: var(--result-text-right, 13%);
+  top: var(--result-text-top, 22%);
+  bottom: var(--result-text-bottom, 25%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--indigo);
+  font-weight: 900;
+  line-height: 1.2;
+  /* 日本語は文節に近いまとまりの間(js/text.js が入れる <wbr>)でだけ折り返す(.phrased)。
+     Chrome でも iPad の WebKit でも同じ折り返しになる。まとまりが入らないときは fitText が
+     文字を小さくし、最小でも入らなければ途中で折る */
+  word-break: break-word;
+  overflow: hidden;
+}
+.img-result--icon .img-result__text { left: var(--result-text-left-icon, 23%); }
+.img-result__icon {
+  position: absolute;
+  left: var(--result-icon-left, 7%);
+  top: 50%;
+  width: var(--result-icon-size, 14%);
+  height: auto;
+  transform: translateY(-58%);
+}
+
+/* ---------------- 台紙なし(panel=0) ----------------
+ * 半透明の藍色の台紙を出さず、素材と文字をゲーム画面の上に直接置く。
+ * 文字は背景が何色でも読めるよう、濃い縁取りを付ける。
+ */
+.theme-wafu.no-panel .event {
+  background: none;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+.theme-wafu.no-panel .event__gift,
+.theme-wafu.no-panel .event__count {
+  text-shadow:
+    3px 3px 0 var(--indigo-deep), -3px 3px 0 var(--indigo-deep),
+    3px -3px 0 var(--indigo-deep), -3px -3px 0 var(--indigo-deep),
+    0 0 10px rgba(18, 26, 54, 0.8);
+}
+
+/* ================================================================
+ * 第1段階の装飾: 金属光沢・控えめな和柄・角の飾り・光沢アニメーション
+ * 台紙の地(半透明 93%)は変えず、その上に細い線と縁取りを重ねるだけ。
+ * ================================================================ */
+.theme-wafu {
+  /* 金属の金(明暗を重ねたグラデーション) */
+  --gold-metal: linear-gradient(135deg, #7a5a1c 0%, #c9a14a 16%, #fff0bf 32%, #d9b25a 46%, #8f6a24 60%, #e8c877 78%, #fff5d0 90%, #a47a2c 100%);
+  --gold-text: linear-gradient(180deg, #fff6d4 0%, #f1d58a 38%, #c39436 52%, #f6e3a6 78%, #fff3cc 100%);
+  --mizu: #7ec8e3;
+  --sakura: #f2a7bf;
+  --murasaki: #8b4fd0;
+}
+
+/* 台紙: 金属光沢の縁取り(画像の角の丸みに合わせた輪)。地の色・透け具合はそのまま */
+.theme-wafu .event {
+  isolation: isolate;
+  border-color: transparent;
+  box-shadow: var(--shadow), inset 0 0 0 3px rgba(214, 173, 82, 0.35), inset 0 0 70px rgba(126, 200, 227, 0.10);
+}
+.theme-wafu .event::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 6px solid transparent;
+  border-radius: 40px;
+  background: var(--gold-metal) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+/* 台紙の内側: 上下の端だけに薄い青海波、四隅に扇と桜(文字の場所には掛けない) */
+.theme-wafu .event::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 34px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform=''%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") left 8px top 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(140 0) scale(-1 1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") right 8px top 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(0 140) scale(1 -1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") left 8px bottom 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(140 140) scale(-1 -1)'%3E%3Cg fill='none' stroke='%23e6c470' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 104a98 98 0 0 1 98-98'/%3E%3Cpath d='M6 80a74 74 0 0 1 74-74' stroke-opacity='0.7'/%3E%3Cline x1='6' y1='6' x2='94.86517601859428' y2='29.811352149431908'/%3E%3Cline x1='6' y1='6' x2='85.67433714816836' y2='51.99999999999999'/%3E%3Cline x1='6' y1='6' x2='71.05382386916237' y2='71.05382386916237'/%3E%3Cline x1='6' y1='6' x2='52.00000000000001' y2='85.67433714816835'/%3E%3Cline x1='6' y1='6' x2='29.811352149431908' y2='94.86517601859428'/%3E%3C/g%3E%3Cg fill='none' stroke='%237ec8e3' stroke-opacity='0.75' stroke-width='2'%3E%3Cpath d='M6 120a114 114 0 0 1 114-114'/%3E%3C/g%3E%3Cg fill='%23f2a7bf' fill-opacity='0.95'%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(0 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(72 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(144 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(216 52 52)'/%3E%3Cellipse cx='52' cy='38' rx='5' ry='9' transform='rotate(288 52 52)'/%3E%3C/g%3E%3Ccircle cx='52' cy='52' r='4' fill='%23d6ad52'/%3E%3C/g%3E%3C/svg%3E") right 8px bottom 8px / 120px 120px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48' viewBox='0 0 96 48'%3E%3Cg fill='none' stroke='%23d6ad52' stroke-opacity='0.55' stroke-width='1.6'%3E%3Cpath d='M-48 24a48 48 0 0 1 96 0'/%3E%3Cpath d='M-36 24a36 36 0 0 1 72 0'/%3E%3Cpath d='M-24 24a24 24 0 0 1 48 0'/%3E%3Cpath d='M-12 24a12 12 0 0 1 24 0'/%3E%3Cpath d='M48 24a48 48 0 0 1 96 0'/%3E%3Cpath d='M60 24a36 36 0 0 1 72 0'/%3E%3Cpath d='M72 24a24 24 0 0 1 48 0'/%3E%3Cpath d='M84 24a12 12 0 0 1 24 0'/%3E%3Cpath d='M0 48a48 48 0 0 1 96 0'/%3E%3Cpath d='M12 48a36 36 0 0 1 72 0'/%3E%3Cpath d='M24 48a24 24 0 0 1 48 0'/%3E%3Cpath d='M36 48a12 12 0 0 1 24 0'/%3E%3Cpath d='M0 0a48 48 0 0 1 96 0'/%3E%3Cpath d='M12 0a36 36 0 0 1 72 0'/%3E%3Cpath d='M24 0a24 24 0 0 1 48 0'/%3E%3Cpath d='M36 0a12 12 0 0 1 24 0'/%3E%3C/g%3E%3C/svg%3E") center top / 96px 48px repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.35) 16%, transparent 30%, transparent 74%, rgba(0, 0, 0, 0.35) 88%, #000 100%);
+  mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.35) 16%, transparent 30%, transparent 74%, rgba(0, 0, 0, 0.35) 88%, #000 100%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.theme-wafu.no-panel .event::before,
+.theme-wafu.no-panel .event::after { display: none; }
+
+/* ギフト名: 金属の金の文字 */
+.theme-wafu .event__gift {
+  background: var(--gold-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(10, 14, 32, 0.85));
+}
+.theme-wafu.no-panel .event__gift {
+  background: none;
+  color: var(--gold);
+  filter: none;
+}
+
+/* 送信者名が長いときは2行に分ける(js/display.js の showSender)。「さん」は名前から離さない */
+.theme-wafu .event__honorific { white-space: nowrap; }
+.theme-wafu .event__sender.is-2line {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  /* 明朝体は字面が行の高さからはみ出しやすいので、行間を少し広めにする */
+  line-height: 1.32;
+  max-height: 2.7em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: clip;
+}
+
+/* タイトル帯に光が1回走る(項目ごと)。光は帯の画像の形の中だけ */
+.theme-wafu .event__title { position: relative; }
+.theme-wafu .event__title::after,
+.theme-wafu .img-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 246, 214, 0.55) 46%, rgba(255, 255, 245, 0.95) 50%, rgba(255, 246, 214, 0.55) 54%, transparent 62%) 100% 0 / 300% 100% no-repeat;
+  opacity: 0;
+}
+.theme-wafu .event__title::after {
+  -webkit-mask: var(--img-title-banner) center / 100% 100% no-repeat;
+  mask: var(--img-title-banner) center / 100% 100% no-repeat;
+}
+.theme-wafu .event__title.sheen::after { animation: wafu-sheen 1.3s 0.35s ease-out both; }
+/* 札: 現れた後に枠の金に光が1回走る(枠の画像の形の中だけ) */
+.theme-wafu .img-card::after {
+  -webkit-mask: var(--img-card-frame) 0 0 / 100% 100% no-repeat;
+  mask: var(--img-card-frame) 0 0 / 100% 100% no-repeat;
+}
+/* 札が現れたとき(js/play-gacha-image.js が .sheen を付ける) */
+.theme-wafu .img-card.sheen::after { animation: wafu-sheen 1.4s 0.35s ease-in-out both; }
+@keyframes wafu-sheen {
+  from { background-position: 100% 0; opacity: 1; }
+  to { background-position: 0 0; opacity: 1; }
+}
+
+/* 結果の一覧・針の下の候補名・残り件数: 縁を金属の金に(中は不透明なので地は変わらない) */
+.theme-wafu .chip,
+.theme-wafu .roulette__ticker {
+  border-color: transparent;
+  background: linear-gradient(var(--washi), var(--washi)) padding-box, var(--gold-metal) border-box;
+}
+.theme-wafu #pending {
+  border-color: transparent;
+  background: linear-gradient(var(--indigo), var(--indigo)) padding-box, var(--gold-metal) border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-wafu .event__title.sheen::after,
+  .theme-wafu .img-card.sheen::after { animation: none; }
+}
+
+/* ================================================================
+ * 第2段階: 7枚の透過PNGを用いた宝珠の分割開封
+ * パーツが欠けている場合は JS 側が従来の capsule 画像に戻す。
+ * 位置は 500px の箱に対する割合。上蓋の開いた位置は js/play-gacha-image.js の動きで決める。
+ * 素材の切れ端を隠す補正(clip / softEdge)は theme.json の orbParts に画像ごとに書く。
+ * ================================================================ */
+.theme-wafu .wafu-orb {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  pointer-events: none;
+  isolation: isolate;
+}
+.theme-wafu .wafu-orb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.theme-wafu .wafu-orb > .wafu-orb__closed { z-index: 5; }
+.theme-wafu .wafu-orb > .wafu-orb__base { z-index: 2; opacity: 0; }
+.theme-wafu .wafu-orb > .wafu-orb__lid { z-index: 4; opacity: 0; }
+/* 光球: 下半球の口(箱の上から 40% あたり)から出てくる */
+.theme-wafu .wafu-orb > .wafu-orb__core { z-index: 3; opacity: 0; width: 62%; height: 62%; left: 19%; top: 9%; }
+/* 光の輪 */
+.theme-wafu .wafu-orb > .wafu-orb__energy {
+  z-index: 6; opacity: 0;
+  width: 125%; height: 125%; left: -12.5%; top: -22.5%;
+  mix-blend-mode: screen;
+}
+/* 花びら・きらめき・金粉(きらめきの画像をもう1枚) */
+.theme-wafu .wafu-orb > .wafu-orb__petals,
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust {
+  z-index: 7; opacity: 0;
+  width: 122%; height: 122%; left: -11%; top: -16%;
+}
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust { mix-blend-mode: screen; }
+/* 画像の端まで描かれた絵(横長 4:3)が直線で切れて見えないよう、周りをぼかす(theme.json の softEdge) */
+.theme-wafu .wafu-orb > .wafu-orb__soft {
+  -webkit-mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+}
+
+/* 光(放射状のグラデーション)。filter を使わず、不透明度だけを動かす(iPad の負荷対策) */
+.theme-wafu .wafu-orb__aura {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+/* 開く前の紫の予兆(SR・SSR で同じ) */
+.theme-wafu .wafu-orb__aura--omen,
+.theme-wafu .wafu-orb[data-rarity="SR"] .wafu-orb__aura--open {
+  background: radial-gradient(circle, rgba(214, 170, 255, 0.85) 0%, rgba(143, 65, 225, 0.5) 35%, transparent 68%);
+}
+
+/* ---- レア度ごとの開封の光(出す部品は theme.json の orbRarity) ----
+ * N   白銀の控えめな光粒。桜は出さない
+ * R   水色・緑の光と小さな光の輪
+ * SR  紫の光と桜の花びら
+ * SSR 開く前は SR と同じ紫、開いたときに金へ昇格。金粉・桜・光を最も豪華に
+ * 画像の色は静止した filter で変える(動かすのは不透明度と位置だけ) */
+.theme-wafu .wafu-orb[data-rarity="N"] .wafu-orb__aura--open {
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, rgba(205, 214, 228, 0.3) 35%, transparent 66%);
+}
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__core { filter: grayscale(1) brightness(1.2); scale: 0.7; }
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__sparkles { filter: grayscale(1) brightness(1.6); scale: 0.75; }
+
+.theme-wafu .wafu-orb[data-rarity="R"] .wafu-orb__aura--open {
+  inset: -8%;
+  background: radial-gradient(circle, rgba(220, 255, 250, 0.8) 0%, rgba(80, 210, 200, 0.45) 35%, transparent 66%);
+}
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__core { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.2) brightness(1.1); scale: 0.85; }
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.6) brightness(1.2); scale: 0.78; }
+
+.theme-wafu .wafu-orb[data-rarity="SR"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(225deg) saturate(2.4) brightness(1.15); }
+
+.theme-wafu .wafu-orb[data-rarity="SSR"] .wafu-orb__aura--open {
+  inset: -24%;
+  background: radial-gradient(circle, rgba(255, 246, 220, 0.95) 0%, rgba(255, 204, 91, 0.65) 35%, transparent 68%);
+}
+.theme-wafu .wafu-orb[data-rarity="SSR"] > .wafu-orb__dust { scale: -1.25 1.25; } /* 左右を反転して大きく重ね、金粉を密にする */
+
+/* 札が出たあとの粒(js/effects.js の fx__gold)をレア度の色にする。SSR は金のまま */
+.theme-wafu .fx[data-rarity="N"] .fx__gold { background: linear-gradient(135deg, #ffffff, #d5dce8 60%, #8e98aa); }
+.theme-wafu .fx[data-rarity="R"] .fx__gold { background: linear-gradient(135deg, #f0fffb, #74d9c9 60%, #2f8f78); }
+.theme-wafu .fx[data-rarity="SR"] .fx__gold { background: linear-gradient(135deg, #fbf1ff, #c49af0 60%, #7a45b8); }
+
+/* ================================================================
+ * 第2段階: レア度ごとの結果カード(theme.json の resultCard)
+ * 枠の内側は濃い色なので、文字は明るい色にする。文字の場所は画像に対する %
+ * (--rc-label-* / --rc-sub-*。js/theme.js が theme.json から入れる)
+ * ================================================================ */
+.theme-wafu .img-card--framed {
+  --card-h: var(--rc-h, 880px);
+  aspect-ratio: var(--rc-aspect, 5 / 6);
+}
+.theme-wafu .img-card--framed[data-rarity] .img-card__window {
+  left: var(--rc-label-left, 17.5%);
+  right: var(--rc-label-right, 17.5%);
+  top: var(--rc-label-top, 21%);
+  bottom: var(--rc-label-bottom, 42%);
+  padding: 0;
+  gap: 14px;
+  background: none;
+  box-shadow: none;
+}
+.theme-wafu .img-card--framed .img-card__label {
+  padding: 0;
+  color: #fff6dc;
+  /* 枠の内側の濃い色の上で読みやすく。金の縁取りの代わりに影 */
+  text-shadow: 0 3px 0 rgba(8, 12, 30, 0.85), 0 0 18px rgba(8, 12, 30, 0.9);
+  line-height: 1.3;
+}
+.theme-wafu .img-card--framed[data-rarity="SSR"] .img-card__label { color: #ffe9a8; }
+.theme-wafu .img-card--framed .img-card__icon {
+  width: 84px;
+  height: 84px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+}
+.theme-wafu .img-card__sub {
+  position: absolute;
+  left: var(--rc-sub-left, 19%);
+  right: var(--rc-sub-right, 19%);
+  top: var(--rc-sub-top, 73.5%);
+  bottom: var(--rc-sub-bottom, 19%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-wafu .img-card__sub-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #f3e3b3;
+  font-weight: 900;
+  line-height: 1.2;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+
+/* 結果カードが出ているあいだは、送信者名・景品名・レア度をカードの中だけに出す
+ * (.event--card は js/display.js が、レア度ごとの結果カードを使う和風ガチャのときだけ付ける)。
+ *   - 見出しの送信者名: 宝珠の開封中は出し、カードが出たら薄く消す(場所は残して札の位置を動かさない)
+ *   - 結果の一覧: カードに出ている最新の1件だけ隠す(次の抽選が始まったら一覧に出る) */
+.theme-wafu .event__sender { transition: opacity 0.3s ease; }
+.theme-wafu .event--card .event__sender { opacity: 0; }
+.theme-wafu .event__results .chip--in-card { display: none; }
+
+/* ================================================================
+ * 和風ルーレット: 横長の結果カード(theme.json の rouletteCard)
+ * 枠の内側は濃い色なので文字は明るい色。送信者名(小さく1行)と景品名を、
+ * 左のバッジ・右の桜を避けた場所(--rcard-text-*)に重ねる
+ * ================================================================ */
+.theme-wafu .img-result--banner {
+  width: var(--rcard-w, 900px);
+  aspect-ratio: var(--rcard-aspect, 10 / 3);
+}
+.theme-wafu .img-result__box {
+  position: absolute;
+  left: var(--rcard-text-left, 23%);
+  right: var(--rcard-text-right, 27%);
+  top: var(--rcard-text-top, 29%);
+  bottom: var(--rcard-text-bottom, 30%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+}
+.theme-wafu .img-result__sender {
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  color: #f3e3b3;
+  font-weight: 900;
+  line-height: 1.15;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+.theme-wafu .img-result--banner .img-result__text {
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  color: #fff6dc;
+  line-height: 1.22;
+  text-shadow: 0 3px 0 rgba(8, 12, 30, 0.85), 0 0 16px rgba(8, 12, 30, 0.9);
+}
+.theme-wafu .img-result--banner[data-rarity="SSR"] .img-result__text { color: #ffe9a8; }
+/* 景品名が長くてカードに送信者名を入れられなかったときは、見出しの送信者名を残す */
+.theme-wafu .event--card.event--keep-sender .event__sender { opacity: 1; }
+
+/* 針の下の候補名: 和紙ではなく、盤面・結果カードに合わせた濃い藍に金の縁 */
+.theme-wafu .roulette__ticker {
+  background: linear-gradient(180deg, #24315e, #121a3a);
+  color: #fff6dc;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+/* 景品名が最小の大きさでも入らないとき: 入る行数で末尾を … にする(全文は結果の一覧に出る) */
+.theme-wafu .img-result--banner .img-result__text.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp-lines, 2);
+  flex: 0 1 auto;
+  max-height: 100%;
+}
+/* 送信者名の専用の帯(theme.json の rouletteCard.sub)。景品名の下 */
+.theme-wafu .img-result__sub {
+  position: absolute;
+  left: var(--rcard-sub-left, 12%);
+  right: var(--rcard-sub-right, 12%);
+  top: var(--rcard-sub-top, 72%);
+  bottom: var(--rcard-sub-bottom, 15%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-wafu .img-result__sub .img-result__sender { max-width: 100%; }

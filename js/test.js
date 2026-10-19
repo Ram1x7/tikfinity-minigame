@@ -3,21 +3,24 @@
 // ------------------------------------------------------------
 // Worker の /admin/test-gift に疑似ギフトを送り、Webhook と同じ処理を通す。
 // ============================================================
-import { getEnv, envLabel, urlWithEnv, pageUrl } from './env.js';
+import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv, pageUrl } from './env.js';
 import { isConfigured, watchConfig, watchRecentQueue, watchDisplayState } from './store.js';
 import { sendTestGift, clearEnv } from './api.js';
 import { h, toast, formatTime } from './dom.js';
+import { loadSavedLayout } from './layout-editor.js';
+import { layoutToParams } from './layout.js';
 
 const env = getEnv();
 const $ = (id) => document.getElementById(id);
 
 // ---------------- ヘッダー ----------------
 $('env-switch').replaceChildren(
-  ...['test', 'prod'].map((e) => h('a', {
+  ...SELECTABLE_ENVS.map((e) => h('a', {
     href: urlWithEnv(e),
     class: `env-switch__item${e === env ? ' is-active' : ''} env-${e}`,
   }, envLabel(e)))
 );
+if (IS_PREVIEW_SITE) $('env-switch').append(h('span', { class: 'env-switch__item env-preview' }, 'プレビュー(テスト専用)'));
 $('env-warning').hidden = env !== 'prod';
 document.title = `テスト画面(${envLabel(env)})`;
 
@@ -123,7 +126,8 @@ $('t-preview').addEventListener('change', (e) => {
   const box = $('preview-box');
   box.hidden = !e.target.checked;
   box.replaceChildren(e.target.checked
-    ? h('iframe', { src: pageUrl('display.html', { env, preview: '1' }), title: '表示画面のプレビュー' })
+    // 管理画面の「表示の調整」で決めたデザイン・位置で表示する
+    ? h('iframe', { src: pageUrl('display.html', { env, preview: '1', ...layoutToParams(loadSavedLayout()) }), title: '表示画面のプレビュー' })
     : '');
 });
 

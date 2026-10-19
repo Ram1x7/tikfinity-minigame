@@ -83,9 +83,21 @@ body {
   font-weight: 700;
 }
 
+/* 台紙の置き場所。上端は js/display.js が設定する */
+#event-slot {
+  position: absolute;
+  top: 300px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
 #pending {
   position: absolute;
-  top: calc(var(--event-top, 300px) - 90px);
+  top: -90px;
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 32px;
@@ -98,10 +110,9 @@ body {
 
 /* ---------------- イベント全体のカード ---------------- */
 .event {
-  position: absolute;
-  left: 40px;
-  right: 40px;
-  top: var(--event-top, 300px);
+  position: relative;
+  width: 1000px;
+  box-sizing: border-box;
   padding: 36px 36px 40px;
   border-radius: 48px;
   background: var(--paper);
@@ -109,13 +120,15 @@ body {
   box-shadow: var(--shadow);
   text-align: center;
   opacity: 0;
-  transform: translateY(40px) scale(0.96);
+  /* --panel-scale は zoom が使えないブラウザ向けの代わり(通常は 1) */
+  transform-origin: top center;
+  transform: translateY(40px) scale(calc(var(--panel-scale, 1) * 0.96));
   transition: opacity 0.35s ease, transform 0.35s ease;
   pointer-events: none;
 }
 .event.show {
   opacity: 1;
-  transform: none;
+  transform: scale(var(--panel-scale, 1));
 }
 
 .event__sender {
@@ -168,7 +181,13 @@ body {
   justify-content: center;
   gap: 14px;
 }
-.event__results:empty { display: none; }
+/* 画像テーマ: 結果は1件1行 */
+.theme-image .event__results {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
 
 .chip {
   padding: 10px 26px;
@@ -180,6 +199,39 @@ body {
   line-height: 1.3;
   max-width: 940px;
   animation: chip-in 0.35s ease both;
+}
+.theme-image .chip {
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+}
+.theme-image .chip__rarity { flex: none; }
+/* 結果の文字。1行に入りきらないときは、左右にゆっくり流して全部見せる(js/display.js の marqueeIfLong) */
+.theme-image .chip__text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.theme-image .chip__scroll { display: inline-block; }
+.theme-image .chip__text.is-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 18px), transparent);
+}
+.theme-image .is-marquee .chip__scroll {
+  padding-left: 6px;
+  animation: chip-marquee var(--marquee-time, 6s) ease-in-out infinite;
+}
+@keyframes chip-marquee {
+  0%, 18% { transform: translateX(0); }
+  62%, 84% { transform: translateX(var(--marquee-x, 0)); }
+  100% { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-image .is-marquee .chip__scroll { animation: none; }
 }
 .chip--more { border-color: var(--ink); color: var(--ink); }
 .chip__rarity {
@@ -304,5 +356,111 @@ body {
   font-size: 76px;
   font-weight: 900;
   line-height: 1.2;
+  opacity: 0;
+}
+
+/* 候補が多いルーレットで、針の下にある候補の名前を大きく出す */
+.roulette__ticker {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  max-width: 920px;
+  padding: 10px 36px;
+  border-radius: 999px;
+  background: #fff;
+  border: 6px solid var(--ink);
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+/* ---------------- 調整用の目安(guide=1) ---------------- */
+#guide {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.guide__comments {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--safe, 1400px);
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 60, 60, 0.18) 0 24px, rgba(255, 60, 60, 0.08) 24px 48px);
+  color: #fff;
+  font-size: 40px;
+  font-weight: 900;
+  padding: 90px 30px;
+  text-shadow: 0 0 6px #000, 0 0 2px #000;
+}
+.guide__safe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--safe, 1400px);
+  border-top: 6px dashed #ff3b3b;
+  color: #ff3b3b;
+  font-size: 34px;
+  font-weight: 900;
+  padding: 8px 30px;
+  text-shadow: 0 0 6px #fff, 0 0 2px #fff;
+}
+
+/* ---------------- 当選時のレア度別の演出(画像テーマ。js/effects.js) ----------------
+ * 再生の枠の中だけに描き、終わると要素ごと取り除く。 */
+.theme-image .fx {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.theme-image .fx__glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fx-color) 85%, #fff) 0%, color-mix(in srgb, var(--fx-color) 45%, transparent) 35%, transparent 65%);
+  opacity: 0;
+}
+.theme-image .fx__rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1100px;
+  height: 1100px;
+  margin: -550px 0 0 -550px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--fx-color) 70%, transparent) 0deg 6deg, transparent 6deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 25%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 25%, transparent 62%);
+  opacity: 0;
+}
+.theme-image .fx__aura {
+  position: absolute;
+  border-radius: 28px;
+  box-shadow: 0 0 36px 14px var(--fx-color), 0 0 0 6px color-mix(in srgb, var(--fx-color) 70%, #fff);
+  opacity: 0;
+}
+.theme-image .fx__petal {
+  position: absolute;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, #ffd9e4, #f39ab5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+}
+.theme-image .fx__gold {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #fff6d0, #e3b54a 60%, #a77a22);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
   opacity: 0;
 }

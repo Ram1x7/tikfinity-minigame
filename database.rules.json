@@ -17,20 +17,7 @@
           ".indexOn": [".value"]
         },
         "state": {
-          ".read": "$env === 'prod' || $env === 'test'",
-          "display": {
-            ".write": "$env === 'prod' || $env === 'test'",
-            ".validate": "newData.hasChildren(['lastPlayedKey', 'updatedAt'])",
-            "lastPlayedKey": {
-              ".validate": "newData.isString() && newData.val().length <= 40"
-            },
-            "updatedAt": {
-              ".validate": "newData.val() === now"
-            },
-            "$other": {
-              ".validate": false
-            }
-          }
+          ".read": "$env === 'prod' || $env === 'test'"
         }
       }
     }

@@ -1,28 +1,36 @@
-/* 管理画面・テスト画面・トップページ共通。iPhone / iPad の Safari で操作しやすいサイズにしている */
+/*
+ * 管理画面・テスト画面・トップページ共通。iPhone / iPad の Safari で操作しやすいサイズにしている。
+ * 配色は表示画面の和風テーマに合わせた 藍色・和紙・金色。
+ */
 :root {
-  --bg: #fbf7f2;
-  --surface: #ffffff;
-  --text: #2f2622;
-  --muted: #7a6c64;
-  --line: #eadfd6;
-  --accent: #e8677a;
-  --accent-text: #ffffff;
-  --danger: #c8443b;
-  --prod: #d9362b;
-  --test: #2f7fd1;
-  --ok: #2e9b5f;
-  --warn-bg: #fff4d6;
+  --bg: #f3ecdc;          /* 和紙 */
+  --surface: #fffaf0;
+  --text: #1b2547;        /* 藍 */
+  --muted: #6b6250;
+  --line: #dccba3;
+  --accent: #24386b;      /* 藍(主ボタン) */
+  --accent-text: #fff6dc;
+  --gold: #c9a14a;
+  --header-bg: #1b2547;
+  --header-text: #fff6dc;
+  --danger: #b8402e;      /* 朱 */
+  --prod: #b8402e;
+  --test: #2f5fa8;
+  --ok: #3d7a5a;
+  --warn-bg: #fbecc4;
   --radius: 14px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1715;
-    --surface: #26201d;
-    --text: #f3ebe5;
-    --muted: #b3a59c;
-    --line: #3d3430;
-    --accent: #f07f90;
+    --bg: #121a36;
+    --surface: #1b2547;
+    --text: #f3ecdc;
+    --muted: #b8ad94;
+    --line: #34436f;
+    --accent: #c9a14a;
+    --accent-text: #121a36;
+    --header-bg: #0d1329;
     --warn-bg: #4a3b16;
     color-scheme: dark;
   }
@@ -56,8 +64,15 @@ code { font-size: 13px; word-break: break-all; }
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.topbar h1 { font-size: 18px; margin: 0; flex: 1; }
-.topbar__home { font-size: 13px; text-decoration: none; color: var(--muted); }
+.topbar {
+  background: var(--header-bg);
+  color: var(--header-text);
+  border-bottom: 3px solid var(--gold);
+}
+.topbar h1 { font-size: 18px; margin: 0; flex: 1; letter-spacing: 0.05em; }
+.topbar__home { font-size: 13px; text-decoration: none; color: var(--gold); }
+.topbar .env-switch { border-color: var(--gold); }
+.topbar .env-switch__item { color: var(--header-text); }
 
 .env-switch { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .env-switch__item { padding: 6px 14px; font-size: 14px; text-decoration: none; color: var(--muted); }
@@ -75,8 +90,9 @@ code { font-size: 13px; word-break: break-all; }
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 16px;
+  box-shadow: 0 2px 0 rgba(201, 161, 74, 0.25);
 }
-.card h2 { font-size: 17px; margin: 0 0 8px; }
+.card h2 { font-size: 17px; margin: 0 0 8px; padding-left: 10px; border-left: 4px solid var(--gold); }
 .card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .card__head h2 { margin: 0; }
 details.card > summary { cursor: pointer; font-weight: 700; }
@@ -117,7 +133,12 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
 }
 .btn:disabled { opacity: 0.5; }
 .btn--small { font-size: 13px; padding: 6px 10px; }
-.btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn--primary {
+  background: var(--accent);
+  border: 2px solid var(--gold);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 220, 0.25);
+}
 .btn--danger { color: var(--danger); }
 .btn--ghost { background: transparent; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
@@ -231,3 +252,25 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.is-error { background: var(--danger); }
+
+/* ---------------- 表示の調整 ---------------- */
+.layout-groups { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0; }
+@media (min-width: 720px) { .layout-groups { grid-template-columns: 1fr 1fr 1fr; } }
+.layout-group { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 4px; margin: 0; }
+.layout-group legend { font-weight: 700; padding: 0 6px; color: var(--text); }
+.slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.slider__label { grid-column: 1 / -1; }
+.slider input[type=range] { width: 100%; padding: 0; accent-color: var(--accent); }
+.slider output { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 700; }
+.layout-previews { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+.layout-previews figure { margin: 0; text-align: center; }
+.layout-previews iframe {
+  width: 216px;
+  height: 384px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #8fc0ea 0 42%, #5f9a62 42% 100%);
+}
+.layout-previews figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+/* プレビューサイト(テスト専用の環境)の目印 */
+.env-switch__item.env-preview { background: #8a4fd0; color: #fff; }

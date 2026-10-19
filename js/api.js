@@ -2,12 +2,13 @@
 // js/api.js
 // ------------------------------------------------------------
 // 管理画面・テスト画面から Worker を呼ぶための関数。
-// Worker の URL と管理用の合言葉は、この端末のブラウザにだけ保存する。
+// Worker の URL・管理用の合言葉・表示用の合言葉は、この端末のブラウザにだけ保存する。
 // ============================================================
 import { DEFAULT_WORKER_URL } from './config.js';
 
 const KEY_URL = 'tm.workerUrl';
 const KEY_ADMIN = 'tm.adminKey';
+const keyDisplay = (env) => `tm.displayKey.${env === 'prod' ? 'prod' : 'test'}`;
 
 function read(key) {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -20,12 +21,32 @@ export function getConnection() {
   return {
     workerUrl: (read(KEY_URL) || DEFAULT_WORKER_URL).replace(/\/+$/, ''),
     adminKey: read(KEY_ADMIN),
+    // 表示画面の URL に付ける合言葉(Worker の DISPLAY_KEY_PROD / DISPLAY_KEY_TEST)
+    displayKeys: { prod: read(keyDisplay('prod')), test: read(keyDisplay('test')) },
   };
 }
 
-export function saveConnection({ workerUrl, adminKey }) {
+export function saveConnection({ workerUrl, adminKey, displayKeys = {} }) {
   write(KEY_URL, String(workerUrl || '').trim().replace(/\/+$/, ''));
   write(KEY_ADMIN, String(adminKey || '').trim());
+  for (const env of ['prod', 'test']) {
+    if (displayKeys[env] !== undefined) write(keyDisplay(env), String(displayKeys[env] || '').trim());
+  }
+}
+
+/**
+ * PRISM LIVE に設定する表示画面の URL に付けるパラメーター。
+ * 表示用の合言葉(dk)と、js/config.js と違う Worker を使う場合はその URL(w)。
+ * 合言葉が未設定なら null。
+ */
+export function streamParams(env) {
+  const c = getConnection();
+  const dk = c.displayKeys[env === 'prod' ? 'prod' : 'test'];
+  if (!dk) return null;
+  const out = { dk };
+  const defaultUrl = String(DEFAULT_WORKER_URL || '').trim().replace(/\/+$/, '');
+  if (c.workerUrl && c.workerUrl !== defaultUrl) out.w = c.workerUrl;
+  return out;
 }
 
 async function call(path, body) {
@@ -51,6 +72,8 @@ export const saveConfig = (env, config) => call(`/admin/config?env=${env}`, conf
 export const sendTestGift = (env, gift) => call(`/admin/test-gift?env=${env}`, gift);
 export const clearEnv = (env) => call(`/admin/clear?env=${env}`);
 export const copyConfig = (from, to) => call(`/admin/copy-config?from=${from}&to=${to}`);
+/** 表示画面の再生担当を外す(待機中の別の表示画面が次の確認で担当になる) */
+export const releasePlayer = (env) => call(`/admin/display/release?env=${env}`);
 
 /**
  * 接続テスト。どこで止まっているかを順番に調べ、
@@ -108,6 +131,21 @@ export async function diagnose(workerUrlInput, adminKeyInput) {
     add(missing.length === 0, 'Worker のシークレット', missing.length ? `未設定: ${missing.join(', ')}` : 'すべて設定済み');
   } else {
     add(null, 'Worker のシークレット', 'Worker が古い版のため確認できません。最新の worker/dist/worker.js を貼り付けてください');
+  }
+
+  if (Array.isArray(info.allowedEnvs)) {
+    add(true, 'この Worker で使える環境', info.allowedEnvs.length
+      ? info.allowedEnvs.map((e) => (e === 'prod' ? '本番' : 'テスト')).join('・') + 'のみ(ALLOWED_ENVS)'
+      : 'なし(ALLOWED_ENVS の値を確認してください)');
+    if (!info.allowedEnvs.includes('prod')) {
+      // 本番への要求を本当に拒否するか確かめる。合言葉を付けないので、拒否されなくても何も読み書きしない
+      try {
+        const res = await fetch(`${url.origin}/display/claim?env=prod`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' });
+        add(res.status === 403, '本番への要求の拒否', res.status === 403 ? '本番(env=prod)への要求は拒否されます' : `拒否されませんでした(応答 ${res.status})。ALLOWED_ENVS を確認してください`);
+      } catch {
+        add(null, '本番への要求の拒否', '確認できませんでした');
+      }
+    }
   }
 
   if (info.allowedOrigins && info.allowedOrigins.length > 0 && !info.allowedOrigins.includes(location.origin)) {
