@@ -769,3 +769,30 @@
 .theme-wafu .event__gift { font-size: 36px; }
 .theme-wafu .event__count { font-size: 32px; min-height: 40px; }
 .theme-wafu .event__title { --banner-w: 540px; font-size: 44px; }
+
+/* 実機プレビューの視認性修正: 明るい背景でも名前とギフトを確実に読めるようにする。
+ * 縁取りを細くし、名前の文字間が潰れるのを防ぐ。 */
+.theme-wafu .event__sender {
+  color: #152347;
+  font-family: 'Zen Maru Gothic', 'Hiragino Kaku Gothic ProN', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 6px rgba(255,255,255,.9);
+}
+.theme-wafu .event__gift {
+  background: none;
+  color: #233359;
+  -webkit-text-fill-color: #233359;
+  filter: none;
+  text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 5px rgba(255,255,255,.9);
+}
+.theme-wafu .event__count {
+  color: #233359;
+  text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 5px rgba(255,255,255,.9);
+}
+/* 結果札で名前を省略しても、上部にフルネームを残す。 */
+.theme-wafu .event--card .event__sender { opacity: 1; }
+.theme-wafu .img-card__sub-text {
+  text-overflow: clip;
+  letter-spacing: -0.025em;
+}
