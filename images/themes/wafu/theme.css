@@ -735,16 +735,7 @@
 /* 2026-10-19: 配信画面向けの視認性調整。
  * 画像素材・抽選処理はそのまま。大きな背景台紙を省いて、結果の札を主役にする。
  * 旧レイアウトのように配信画面を隠さず、長文の表示領域を広げる。 */
-.theme-wafu .event {
-  background: transparent;
-  border-color: transparent;
-  outline: none;
-  box-shadow: none;
-}
-.theme-wafu .event::before,
-.theme-wafu .event::after {
-  display: none;
-}
+/* 通常は背景台紙を残す。panel=0 のときだけ既存の .no-panel 指定で非表示。 */
 /* 結果カードの文字領域を下に広げる。送信者帯(73.5%〜)には重ねない。 */
 .theme-wafu .img-card--framed[data-rarity] .img-card__window {
   bottom: 31%;
@@ -770,23 +761,27 @@
 .theme-wafu .event__count { font-size: 32px; min-height: 40px; }
 .theme-wafu .event__title { --banner-w: 540px; font-size: 44px; }
 
-/* 実機プレビューの視認性修正: 明るい背景でも名前とギフトを確実に読めるようにする。
- * 縁取りを細くし、名前の文字間が潰れるのを防ぐ。 */
+/* 実機プレビューの視認性修正。背景台紙ありをデフォルトに保つ。
+ * panel=0 のときだけ明るい配信画面に合わせた濃い文字色を使用する。 */
 .theme-wafu .event__sender {
-  color: #152347;
   font-family: 'Zen Maru Gothic', 'Hiragino Kaku Gothic ProN', sans-serif;
   font-weight: 900;
   letter-spacing: 0;
+  text-shadow: 1px 1px 0 var(--indigo-deep), -1px 1px 0 var(--indigo-deep),
+    1px -1px 0 var(--indigo-deep), -1px -1px 0 var(--indigo-deep);
+}
+.theme-wafu.no-panel .event__sender {
+  color: #152347;
   text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 6px rgba(255,255,255,.9);
 }
-.theme-wafu .event__gift {
+.theme-wafu.no-panel .event__gift {
   background: none;
   color: #233359;
   -webkit-text-fill-color: #233359;
   filter: none;
   text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 5px rgba(255,255,255,.9);
 }
-.theme-wafu .event__count {
+.theme-wafu.no-panel .event__count {
   color: #233359;
   text-shadow: 0 1px 2px rgba(255,255,255,.95), 0 0 5px rgba(255,255,255,.9);
 }
