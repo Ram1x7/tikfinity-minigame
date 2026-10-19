@@ -22,11 +22,18 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   // 画像が全て揃った場合だけ分割宝珠を使う。未配置・読込失敗なら従来演出。
   const parts = theme.orbParts;
   const layered = Boolean(parts);
+  const rarity = String(roll.rarity || 'N').toUpperCase();
   let orb = null;
+  let aura = null;
+  let auraGold = null;
   if (layered) {
     orb = document.createElement('div');
     orb.className = 'wafu-orb';
-    orb.style.setProperty('--orb-color', color);
+    aura = document.createElement('div');
+    aura.className = 'wafu-orb__aura';
+    auraGold = document.createElement('div');
+    auraGold.className = 'wafu-orb__aura wafu-orb__aura--gold';
+    orb.append(aura, auraGold);
     for (const key of ['closed', 'base', 'lid', 'core', 'energy', 'petals', 'sparkles']) {
       orb.append(img(parts[key], `wafu-orb__${key}`));
     }
@@ -57,6 +64,10 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
 
   // 揺れ(レア度が高いほど長く揺れる)
   const shakes = { N: 2, R: 3, SR: 4, SSR: 5 }[roll.rarity] || 2;
+  if (layered && (rarity === 'SR' || rarity === 'SSR')) {
+    // 紫の予兆。SR と SSR で同じにして、開くまで SSR かどうか分からないようにする
+    aura.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: t(330 * shakes), easing: 'ease-in', fill: 'forwards' });
+  }
   for (let i = 0; i < shakes; i++) {
     await (orb || closed).animate(
       [{ transform: 'rotate(0)' }, { transform: 'rotate(-10deg)' }, { transform: 'rotate(10deg)' }, { transform: 'rotate(0)' }],
@@ -80,24 +91,28 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
       { duration: t(300), delay: t(delay), fill: 'forwards' }
     );
     reveal('base');
-    const lid = get('lid');
-    lid.animate(
-      [{ opacity: 0, transform: 'translateY(0) rotate(0deg)' },
-       { opacity: 1, transform: 'translateY(-22%) rotate(-7deg)' },
-       { opacity: 1, transform: 'translateY(-28%) rotate(-9deg)' }],
-      { duration: t(640), easing: 'ease-out', fill: 'forwards' }
+    // 上蓋は下半球の右奥を支点に開いたように、右上へ持ち上げて少し小さくする
+    // (同じ位置のままだと下半球の口と光球を覆ってしまう)
+    get('lid').animate(
+      [{ opacity: 0, transform: 'translate(0, -8%) scale(.95)' },
+       { opacity: 1, transform: 'translate(3%, -18%) scale(.9)', offset: 0.3 },
+       { opacity: 1, transform: 'translate(10%, -43%) scale(.8)' }],
+      { duration: t(640), easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'forwards' }
     );
-    reveal('core', 130);
+    get('core').animate(
+      [{ opacity: 0, transform: 'translateY(12%) scale(.55)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+      { duration: t(420), delay: t(130), easing: 'ease-out', fill: 'forwards' }
+    );
     reveal('energy', 170);
     reveal('petals', 210);
     reveal('sparkles', 210);
-    if (String(roll.rarity).toUpperCase() === 'SSR') {
-      // 紫の予兆から金色へ。描画のみ変更し、抽選結果には触れない。
-      orb.classList.add('wafu-orb--ssr');
-      await sleep(t(280));
-      orb.classList.add('wafu-orb--promoted');
+    if (rarity === 'SSR') {
+      // 紫の予兆から金色へ(昇格)。描画のみ変更し、抽選結果には触れない
+      aura.animate([{ opacity: 0.9 }, { opacity: 0 }], { duration: t(380), fill: 'forwards' });
+      auraGold.animate([{ opacity: 0, transform: 'scale(.8)' }, { opacity: 1, transform: 'scale(1.1)' }],
+        { duration: t(380), easing: 'ease-out', fill: 'forwards' });
     }
-    await sleep(t(720));
+    await sleep(t(rarity === 'SSR' ? 1000 : 720)); // SSR は昇格を見せるぶん少し長い(従来の仮実装と同じ長さ)
     orb.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(1.14)' }],
       { duration: t(350), fill: 'forwards' });
   } else {

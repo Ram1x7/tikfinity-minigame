@@ -506,6 +506,7 @@
 /* ================================================================
  * 第2段階: 7枚の透過PNGを用いた宝珠の分割開封
  * パーツが欠けている場合は JS 側が従来の capsule 画像に戻す。
+ * 位置は 500px の箱に対する割合。上蓋の開いた位置は js/play-gacha-image.js の動きで決める
  * ================================================================ */
 .theme-wafu .wafu-orb {
   position: absolute;
@@ -516,24 +517,44 @@
 }
 .theme-wafu .wafu-orb > img {
   position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  inset: 0;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
 }
-.theme-wafu .wafu-orb__closed { z-index: 5; }
-.theme-wafu .wafu-orb__base { z-index: 2; opacity: 0; }
-.theme-wafu .wafu-orb__lid { z-index: 4; opacity: 0; transform-origin: 50% 70%; }
-.theme-wafu .wafu-orb__core { z-index: 3; opacity: 0; width: 62% !important; height: 62% !important; inset: 19% !important; }
-.theme-wafu .wafu-orb__energy { z-index: 6; opacity: 0; width: 125% !important; height: 125% !important; inset: -12.5% !important; mix-blend-mode: screen; }
-.theme-wafu .wafu-orb__petals,
-.theme-wafu .wafu-orb__sparkles { z-index: 7; opacity: 0; width: 122% !important; height: 122% !important; inset: -11% !important; }
-.theme-wafu .wafu-orb__sparkles { mix-blend-mode: screen; }
-.theme-wafu .wafu-orb--ssr { filter: drop-shadow(0 0 22px rgba(143, 65, 225, 0.65)); }
-.theme-wafu .wafu-orb--ssr.wafu-orb--promoted { filter: drop-shadow(0 0 32px rgba(255, 204, 91, 0.9)); }
-@media (prefers-reduced-motion: reduce) {
-  .theme-wafu .wafu-orb--ssr,
-  .theme-wafu .wafu-orb--ssr.wafu-orb--promoted { filter: none; }
+.theme-wafu .wafu-orb > .wafu-orb__closed { z-index: 5; }
+/* 下半球: 素材の左端にある房の切れ端を隠す */
+.theme-wafu .wafu-orb > .wafu-orb__base { z-index: 2; opacity: 0; clip-path: inset(0 0 0 7%); }
+.theme-wafu .wafu-orb > .wafu-orb__lid { z-index: 4; opacity: 0; }
+/* 光球: 下半球の口(箱の上から 40% あたり)から出てくる */
+.theme-wafu .wafu-orb > .wafu-orb__core { z-index: 3; opacity: 0; width: 62%; height: 62%; left: 19%; top: 9%; }
+/* 光の輪: 素材の上部にある飾りの切れ端を隠す */
+.theme-wafu .wafu-orb > .wafu-orb__energy {
+  z-index: 6; opacity: 0;
+  width: 125%; height: 125%; left: -12.5%; top: -22.5%;
+  clip-path: inset(35% 0 0 0);
+  mix-blend-mode: screen;
+}
+/* 花びら・きらめき: 素材の端で切れて見えないよう、周りをぼかす */
+.theme-wafu .wafu-orb > .wafu-orb__petals,
+.theme-wafu .wafu-orb > .wafu-orb__sparkles {
+  z-index: 7; opacity: 0;
+  width: 122%; height: 122%; left: -11%; top: -16%;
+  -webkit-mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
+}
+.theme-wafu .wafu-orb > .wafu-orb__sparkles { mix-blend-mode: screen; }
+/* SR・SSR の予兆(紫)と SSR の昇格(金)。filter を使わず、不透明度だけを動かす(iPad の負荷対策) */
+.theme-wafu .wafu-orb__aura {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(214, 170, 255, 0.85) 0%, rgba(143, 65, 225, 0.5) 35%, transparent 68%);
+}
+.theme-wafu .wafu-orb__aura--gold {
+  background: radial-gradient(circle, rgba(255, 246, 220, 0.95) 0%, rgba(255, 204, 91, 0.6) 35%, transparent 68%);
 }

@@ -359,6 +359,48 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(和風): 宝珠の分割開封(7枚そろえば使う。1枚でも欠ければ従来の玉) ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SSR&speed=2`);
+    await page.waitForSelector('.wafu-orb', { timeout: 20000 });
+    assert.equal(await page.locator('.wafu-orb > img').count(), 7, '7枚の部品');
+    assert.equal(await page.locator('.img-gacha__capsule').count(), 0, '従来の玉は出さない');
+    // 開き切ったところで止めて、上蓋・光球・SSR の金色を確かめる
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.wafu-orb__sparkles')).opacity > 0.95, null, { timeout: 20000, polling: 20 });
+    await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()));
+    const o = await page.evaluate(() => {
+      const rect = (k) => document.querySelector(`.wafu-orb__${k}`).getBoundingClientRect();
+      const op = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return {
+        lid: rect('lid'), base: rect('base'),
+        core: op('.wafu-orb__core'), closed: op('.wafu-orb__closed'),
+        gold: op('.wafu-orb__aura--gold'), purple: op('.wafu-orb__aura:not(.wafu-orb__aura--gold)'),
+      };
+    });
+    assert.ok(o.lid.top < o.base.top - o.base.height * 0.3, `上蓋が下半球の上へ開いている: ${o.lid.top} / ${o.base.top}`);
+    assert.ok(o.lid.left > o.base.left, '上蓋は右奥へ開く');
+    assert.ok(o.core > 0.9 && o.closed < 0.05, `光球が見え、閉じた玉は消えている: ${o.core} / ${o.closed}`);
+    assert.ok(o.gold > 0.9 && o.purple < 0.3, `SSR は紫から金へ: 金 ${o.gold} 紫 ${o.purple}`);
+    assert.deepEqual(errors, []);
+    await page.close();
+
+    // 部品が1枚でも読めなければ、従来の玉の画像で演出する
+    const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await fb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await fb.route('**/orb-core.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await fb.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SSR&speed=4`);
+    await fb.waitForSelector('.img-gacha', { timeout: 20000 });
+    assert.equal(await fb.locator('.wafu-orb').count(), 0, '欠けたら分割開封は使わない');
+    assert.equal(await fb.locator('.img-gacha__capsule').count(), 2, '従来の玉(閉じた・開いた)');
+    await fb.waitForSelector('.img-card.sheen', { timeout: 20000 });
+    await fb.close();
+    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格)と、部品が欠けたときの従来演出');
+  }
+
   // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------
   {
     const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
