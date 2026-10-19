@@ -92,10 +92,10 @@
   "rarityColors": { "N": "#6b7482", "R": "#2f8f5b", "SR": "#8b4fd0", "SSR": "#d9a536" },
   "badgeStyle": "text",
   "effects": {
-    "N": { "glow": 0, "aura": 0, "rays": 0, "sakura": 0, "gold": 0, "duration": 0 },
-    "R": { "glow": 0.3, "aura": 0.6, "rays": 0, "sakura": 0, "gold": 4, "duration": 1200 },
-    "SR": { "glow": 0.45, "aura": 0.75, "rays": 0, "sakura": 8, "gold": 6, "duration": 1600 },
-    "SSR": { "glow": 0.6, "aura": 0.9, "rays": 0.3, "sakura": 14, "gold": 10, "duration": 2000 }
+    "N": { "glow": 0, "aura": 0.35, "color": "#e3e9f2", "rays": 0, "sakura": 0, "gold": 4, "duration": 1100 },
+    "R": { "glow": 0.3, "aura": 0.6, "color": "#6fd8c8", "rays": 0, "sakura": 0, "gold": 5, "duration": 1300 },
+    "SR": { "glow": 0.45, "aura": 0.75, "rays": 0, "sakura": 10, "gold": 6, "duration": 1700 },
+    "SSR": { "glow": 0.7, "aura": 1, "color": "#ffd27a", "rays": 0.4, "sakura": 18, "gold": 16, "duration": 2400 }
   },
   "roulette": {
     "colors": [
@@ -115,10 +115,16 @@
   "orbParts": {
     "closed": "orb-closed.png",
     "lid": "orb-open-lid.png",
-    "base": "orb-open-base.png",
+    "base": { "file": "orb-open-base.png", "clip": "inset(0 0 0 7%)" },
     "core": "orb-core.png",
-    "energy": "orb-energy.png",
-    "petals": "orb-petals.png",
-    "sparkles": "orb-sparkles.png"
+    "energy": { "file": "orb-energy.png", "clip": "inset(35% 0 0 0)" },
+    "petals": { "file": "orb-petals.png", "softEdge": true },
+    "sparkles": { "file": "orb-sparkles.png", "softEdge": true }
+  },
+  "orbRarity": {
+    "N": ["core", "sparkles"],
+    "R": ["core", "energy"],
+    "SR": ["core", "energy", "petals"],
+    "SSR": ["core", "energy", "petals", "sparkles", "dust"]
   }
 }

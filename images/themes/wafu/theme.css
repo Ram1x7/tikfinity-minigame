@@ -506,7 +506,8 @@
 /* ================================================================
  * 第2段階: 7枚の透過PNGを用いた宝珠の分割開封
  * パーツが欠けている場合は JS 側が従来の capsule 画像に戻す。
- * 位置は 500px の箱に対する割合。上蓋の開いた位置は js/play-gacha-image.js の動きで決める
+ * 位置は 500px の箱に対する割合。上蓋の開いた位置は js/play-gacha-image.js の動きで決める。
+ * 素材の切れ端を隠す補正(clip / softEdge)は theme.json の orbParts に画像ごとに書く。
  * ================================================================ */
 .theme-wafu .wafu-orb {
   position: absolute;
@@ -525,36 +526,74 @@
   user-select: none;
 }
 .theme-wafu .wafu-orb > .wafu-orb__closed { z-index: 5; }
-/* 下半球: 素材の左端にある房の切れ端を隠す */
-.theme-wafu .wafu-orb > .wafu-orb__base { z-index: 2; opacity: 0; clip-path: inset(0 0 0 7%); }
+.theme-wafu .wafu-orb > .wafu-orb__base { z-index: 2; opacity: 0; }
 .theme-wafu .wafu-orb > .wafu-orb__lid { z-index: 4; opacity: 0; }
 /* 光球: 下半球の口(箱の上から 40% あたり)から出てくる */
 .theme-wafu .wafu-orb > .wafu-orb__core { z-index: 3; opacity: 0; width: 62%; height: 62%; left: 19%; top: 9%; }
-/* 光の輪: 素材の上部にある飾りの切れ端を隠す */
+/* 光の輪 */
 .theme-wafu .wafu-orb > .wafu-orb__energy {
   z-index: 6; opacity: 0;
   width: 125%; height: 125%; left: -12.5%; top: -22.5%;
-  clip-path: inset(35% 0 0 0);
   mix-blend-mode: screen;
 }
-/* 花びら・きらめき: 素材の端で切れて見えないよう、周りをぼかす */
+/* 花びら・きらめき・金粉(きらめきの画像をもう1枚) */
 .theme-wafu .wafu-orb > .wafu-orb__petals,
-.theme-wafu .wafu-orb > .wafu-orb__sparkles {
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust {
   z-index: 7; opacity: 0;
   width: 122%; height: 122%; left: -11%; top: -16%;
+}
+.theme-wafu .wafu-orb > .wafu-orb__sparkles,
+.theme-wafu .wafu-orb > .wafu-orb__dust { mix-blend-mode: screen; }
+/* 画像の端まで描かれた絵(横長 4:3)が直線で切れて見えないよう、周りをぼかす(theme.json の softEdge) */
+.theme-wafu .wafu-orb > .wafu-orb__soft {
   -webkit-mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
   mask-image: radial-gradient(ellipse 50% 38% at 50% 50%, #000 65%, transparent 100%);
 }
-.theme-wafu .wafu-orb > .wafu-orb__sparkles { mix-blend-mode: screen; }
-/* SR・SSR の予兆(紫)と SSR の昇格(金)。filter を使わず、不透明度だけを動かす(iPad の負荷対策) */
+
+/* 光(放射状のグラデーション)。filter を使わず、不透明度だけを動かす(iPad の負荷対策) */
 .theme-wafu .wafu-orb__aura {
   position: absolute;
   inset: -15%;
   z-index: 0;
   border-radius: 50%;
   opacity: 0;
+}
+/* 開く前の紫の予兆(SR・SSR で同じ) */
+.theme-wafu .wafu-orb__aura--omen,
+.theme-wafu .wafu-orb[data-rarity="SR"] .wafu-orb__aura--open {
   background: radial-gradient(circle, rgba(214, 170, 255, 0.85) 0%, rgba(143, 65, 225, 0.5) 35%, transparent 68%);
 }
-.theme-wafu .wafu-orb__aura--gold {
-  background: radial-gradient(circle, rgba(255, 246, 220, 0.95) 0%, rgba(255, 204, 91, 0.6) 35%, transparent 68%);
+
+/* ---- レア度ごとの開封の光(出す部品は theme.json の orbRarity) ----
+ * N   白銀の控えめな光粒。桜は出さない
+ * R   水色・緑の光と小さな光の輪
+ * SR  紫の光と桜の花びら
+ * SSR 開く前は SR と同じ紫、開いたときに金へ昇格。金粉・桜・光を最も豪華に
+ * 画像の色は静止した filter で変える(動かすのは不透明度と位置だけ) */
+.theme-wafu .wafu-orb[data-rarity="N"] .wafu-orb__aura--open {
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, rgba(205, 214, 228, 0.3) 35%, transparent 66%);
 }
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__core { filter: grayscale(1) brightness(1.2); scale: 0.7; }
+.theme-wafu .wafu-orb[data-rarity="N"] > .wafu-orb__sparkles { filter: grayscale(1) brightness(1.6); scale: 0.75; }
+
+.theme-wafu .wafu-orb[data-rarity="R"] .wafu-orb__aura--open {
+  inset: -8%;
+  background: radial-gradient(circle, rgba(220, 255, 250, 0.8) 0%, rgba(80, 210, 200, 0.45) 35%, transparent 66%);
+}
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__core { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.2) brightness(1.1); scale: 0.85; }
+.theme-wafu .wafu-orb[data-rarity="R"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(125deg) saturate(2.6) brightness(1.2); scale: 0.78; }
+
+.theme-wafu .wafu-orb[data-rarity="SR"] > .wafu-orb__energy { filter: grayscale(1) sepia(1) hue-rotate(225deg) saturate(2.4) brightness(1.15); }
+
+.theme-wafu .wafu-orb[data-rarity="SSR"] .wafu-orb__aura--open {
+  inset: -24%;
+  background: radial-gradient(circle, rgba(255, 246, 220, 0.95) 0%, rgba(255, 204, 91, 0.65) 35%, transparent 68%);
+}
+.theme-wafu .wafu-orb[data-rarity="SSR"] > .wafu-orb__dust { scale: -1.25 1.25; } /* 左右を反転して大きく重ね、金粉を密にする */
+
+/* 札が出たあとの粒(js/effects.js の fx__gold)をレア度の色にする。SSR は金のまま */
+.theme-wafu .fx[data-rarity="N"] .fx__gold { background: linear-gradient(135deg, #ffffff, #d5dce8 60%, #8e98aa); }
+.theme-wafu .fx[data-rarity="R"] .fx__gold { background: linear-gradient(135deg, #f0fffb, #74d9c9 60%, #2f8f78); }
+.theme-wafu .fx[data-rarity="SR"] .fx__gold { background: linear-gradient(135deg, #fbf1ff, #c49af0 60%, #7a45b8); }

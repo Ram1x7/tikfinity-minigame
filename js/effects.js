@@ -75,7 +75,10 @@ export function playRarityEffect(host, theme, rarity, { color = '', speed = 1, f
   back.className = 'fx fx__back';
   const front = document.createElement('div'); // 札の前(花びら・金の粒)
   front.className = 'fx fx__front';
-  for (const el of [back, front]) el.style.setProperty('--fx-color', tint);
+  for (const el of [back, front]) {
+    el.style.setProperty('--fx-color', tint);
+    el.dataset.rarity = String(rarity || 'N').toUpperCase(); // テーマの CSS で粒の色をレア度ごとに変えられる
+  }
   host.prepend(back);
   host.append(front);
   const anims = [];

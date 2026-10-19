@@ -13,6 +13,7 @@
 // ============================================================
 import { rarityColor } from './visual.js';
 import { setPhrased } from './text.js';
+import { parseOrb, ORB_PARTS } from './orb.js';
 
 const THEMES_BASE = new URL('../images/themes/', import.meta.url);
 
@@ -123,7 +124,9 @@ export async function loadTheme(name) {
     images: Object.fromEntries(Object.entries(manifest.images || {})
       .filter(([k]) => k !== 'rarity')
       .map(([k, v]) => [k, url(v)])),
-    orbParts: null, // 全画像が揃うまでは従来の開封画像に戻す
+    orbParts: null, // 宝珠の部品の URL。全画像が揃うまでは null(従来の開封画像に戻す)
+    orbFixes: {},   // 素材の切れ端を隠す暫定の補正(js/orb.js)
+    orbRarity: {},  // レア度ごとに開いたときに出す光の部品
     rarity: Object.fromEntries(Object.entries((manifest.images || {}).rarity || {}).map(([k, v]) => [k.toUpperCase(), url(v)])),
     icons: (manifest.icons || []).map((i) => ({ src: url(i.file), words: i.words || [] })),
     geometry: manifest.geometry || {},
@@ -135,7 +138,8 @@ export async function loadTheme(name) {
   };
 
   const styles = [manifest.css ? url(manifest.css) : null, ...(manifest.fonts || [])].filter(Boolean);
-  const orbUrls = Object.fromEntries(Object.entries(manifest.orbParts || {}).map(([key, file]) => [key, url(file)]));
+  const orb = parseOrb(manifest);
+  const orbUrls = Object.fromEntries(Object.entries(orb.files).map(([key, file]) => [key, url(file)]));
   const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src), ...Object.values(orbUrls)];
   const [, loaded] = await Promise.all([
     Promise.all(styles.map(loadStylesheet)),
@@ -143,9 +147,10 @@ export async function loadTheme(name) {
   ]);
   const imgs = new Map(loaded);
   // 透過パーツが揃わない状態で半端な開封をしない。全7枚が読み込めた場合のみ有効。
-  const requiredOrb = ['closed', 'lid', 'base', 'core', 'energy', 'petals', 'sparkles'];
-  if (requiredOrb.every((key) => orbUrls[key] && imgs.get(orbUrls[key]))) {
+  if (ORB_PARTS.every((key) => orbUrls[key] && imgs.get(orbUrls[key]))) {
     theme.orbParts = orbUrls;
+    theme.orbFixes = orb.fixes;
+    theme.orbRarity = orb.rarity;
   }
 
   // 札の窓・リングの穴の位置(theme.json で "auto" なら画像から測る)

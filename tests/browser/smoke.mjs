@@ -367,7 +367,7 @@ try {
     await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
     await page.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SSR&speed=2`);
     await page.waitForSelector('.wafu-orb', { timeout: 20000 });
-    assert.equal(await page.locator('.wafu-orb > img').count(), 7, '7枚の部品');
+    assert.equal(await page.locator('.wafu-orb > img').count(), 8, 'SSR は7枚の部品と金粉(きらめきをもう1枚)');
     assert.equal(await page.locator('.img-gacha__capsule').count(), 0, '従来の玉は出さない');
     // 開き切ったところで止めて、上蓋・光球・SSR の金色を確かめる
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.wafu-orb__sparkles')).opacity > 0.95, null, { timeout: 20000, polling: 20 });
@@ -378,15 +378,34 @@ try {
       return {
         lid: rect('lid'), base: rect('base'),
         core: op('.wafu-orb__core'), closed: op('.wafu-orb__closed'),
-        gold: op('.wafu-orb__aura--gold'), purple: op('.wafu-orb__aura:not(.wafu-orb__aura--gold)'),
+        gold: op('.wafu-orb__aura--open'), purple: op('.wafu-orb__aura--omen'),
+        layers: [...document.querySelectorAll('.wafu-orb > img')].map((e) => e.className.split(' ')[0].replace('wafu-orb__', '')),
+        clip: getComputedStyle(document.querySelector('.wafu-orb__base')).clipPath,
       };
     });
     assert.ok(o.lid.top < o.base.top - o.base.height * 0.3, `上蓋が下半球の上へ開いている: ${o.lid.top} / ${o.base.top}`);
     assert.ok(o.lid.left > o.base.left, '上蓋は右奥へ開く');
     assert.ok(o.core > 0.9 && o.closed < 0.05, `光球が見え、閉じた玉は消えている: ${o.core} / ${o.closed}`);
     assert.ok(o.gold > 0.9 && o.purple < 0.3, `SSR は紫から金へ: 金 ${o.gold} 紫 ${o.purple}`);
+    assert.deepEqual(o.layers, ['closed', 'base', 'lid', 'core', 'energy', 'petals', 'sparkles', 'dust'], 'SSR は金粉まで全部');
+    assert.equal(o.clip, 'inset(0px 0px 0px 7%)', '素材の切れ端の補正は theme.json から');
     assert.deepEqual(errors, []);
     await page.close();
+
+    // N は白銀の光粒だけ(桜・光の輪は出さない)。開く前の紫の予兆も出さない
+    const n = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await n.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await n.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=N&speed=2`);
+    await n.waitForSelector('.wafu-orb', { timeout: 20000 });
+    const nLayers = await n.evaluate(() => [...document.querySelectorAll('.wafu-orb > img')].map((e) => e.className.split(' ')[0].replace('wafu-orb__', '')));
+    assert.deepEqual(nLayers, ['closed', 'base', 'lid', 'core', 'sparkles'], `N の部品: ${nLayers}`);
+    await n.waitForFunction(() => getComputedStyle(document.querySelector('.wafu-orb__sparkles')).opacity > 0.95, null, { timeout: 20000, polling: 20 });
+    assert.ok(Number(await n.evaluate(() => getComputedStyle(document.querySelector('.wafu-orb__aura--omen')).opacity)) < 0.01, 'N は紫の予兆なし');
+    // 札が出たあとの演出にも桜は出さない
+    await n.waitForSelector('.fx', { timeout: 20000 });
+    assert.equal(await n.locator('.fx__petal').count(), 0, 'N は桜なし');
+    assert.equal(await n.evaluate(() => document.querySelector('.fx').dataset.rarity), 'N');
+    await n.close();
 
     // 部品が1枚でも読めなければ、従来の玉の画像で演出する
     const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
@@ -398,7 +417,7 @@ try {
     assert.equal(await fb.locator('.img-gacha__capsule').count(), 2, '従来の玉(閉じた・開いた)');
     await fb.waitForSelector('.img-card.sheen', { timeout: 20000 });
     await fb.close();
-    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格)と、部品が欠けたときの従来演出');
+    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格・N の控えめな光)と、部品が欠けたときの従来演出');
   }
 
   // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------

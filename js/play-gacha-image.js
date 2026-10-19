@@ -5,6 +5,7 @@ import { sleep } from './visual.js';
 import { img, rarityBadge, iconFor, fitText, textBoostOf, themeRarityColor } from './theme.js';
 import { playRarityEffect } from './effects.js';
 import { setPhrased } from './text.js';
+import { orbLayersFor } from './orb.js';
 
 export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const t = (ms) => ms / speed;
@@ -24,18 +25,27 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const layered = Boolean(parts);
   const rarity = String(roll.rarity || 'N').toUpperCase();
   let orb = null;
-  let aura = null;
-  let auraGold = null;
+  let omen = null;     // 開く前の紫の予兆(SR・SSR)
+  let openAura = null; // 開いたときの光(色はレア度ごとに theme.css)
+  const layers = layered ? orbLayersFor({ rarity: theme.orbRarity }, rarity) : [];
   if (layered) {
     orb = document.createElement('div');
     orb.className = 'wafu-orb';
-    aura = document.createElement('div');
-    aura.className = 'wafu-orb__aura';
-    auraGold = document.createElement('div');
-    auraGold.className = 'wafu-orb__aura wafu-orb__aura--gold';
-    orb.append(aura, auraGold);
-    for (const key of ['closed', 'base', 'lid', 'core', 'energy', 'petals', 'sparkles']) {
-      orb.append(img(parts[key], `wafu-orb__${key}`));
+    orb.dataset.rarity = rarity;
+    omen = document.createElement('div');
+    omen.className = 'wafu-orb__aura wafu-orb__aura--omen';
+    openAura = document.createElement('div');
+    openAura.className = 'wafu-orb__aura wafu-orb__aura--open';
+    orb.append(omen, openAura);
+    // dust(金粉)は sparkles の画像をもう1枚重ねたもの
+    for (const key of ['closed', 'base', 'lid', ...layers]) {
+      const source = key === 'dust' ? 'sparkles' : key;
+      const el = img(parts[source], `wafu-orb__${key}`);
+      // 素材の切れ端を隠す暫定の補正(theme.json の orbParts。PNG を差し替えたら補正も消す)
+      const fix = (theme.orbFixes || {})[source] || {};
+      if (fix.clip) { el.style.clipPath = fix.clip; el.style.webkitClipPath = fix.clip; }
+      if (fix.softEdge) el.classList.add('wafu-orb__soft');
+      orb.append(el);
     }
   }
 
@@ -66,7 +76,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   const shakes = { N: 2, R: 3, SR: 4, SSR: 5 }[roll.rarity] || 2;
   if (layered && (rarity === 'SR' || rarity === 'SSR')) {
     // 紫の予兆。SR と SSR で同じにして、開くまで SSR かどうか分からないようにする
-    aura.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: t(330 * shakes), easing: 'ease-in', fill: 'forwards' });
+    omen.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: t(330 * shakes), easing: 'ease-in', fill: 'forwards' });
   }
   for (let i = 0; i < shakes; i++) {
     await (orb || closed).animate(
@@ -99,19 +109,18 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
        { opacity: 1, transform: 'translate(10%, -43%) scale(.8)' }],
       { duration: t(640), easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'forwards' }
     );
-    get('core').animate(
-      [{ opacity: 0, transform: 'translateY(12%) scale(.55)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
-      { duration: t(420), delay: t(130), easing: 'ease-out', fill: 'forwards' }
-    );
-    reveal('energy', 170);
-    reveal('petals', 210);
-    reveal('sparkles', 210);
-    if (rarity === 'SSR') {
-      // 紫の予兆から金色へ(昇格)。描画のみ変更し、抽選結果には触れない
-      aura.animate([{ opacity: 0.9 }, { opacity: 0 }], { duration: t(380), fill: 'forwards' });
-      auraGold.animate([{ opacity: 0, transform: 'scale(.8)' }, { opacity: 1, transform: 'scale(1.1)' }],
-        { duration: t(380), easing: 'ease-out', fill: 'forwards' });
+    if (layers.includes('core')) {
+      get('core').animate(
+        [{ opacity: 0, transform: 'translateY(12%) scale(.55)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+        { duration: t(420), delay: t(130), easing: 'ease-out', fill: 'forwards' }
+      );
     }
+    const delays = { energy: 170, petals: 210, sparkles: 210, dust: 320 };
+    for (const key of layers) if (delays[key] !== undefined) reveal(key, delays[key]);
+    // 開いたときの光。SSR は紫の予兆が消えて金に変わる(昇格)。描画のみ変更し、抽選結果には触れない
+    if (rarity === 'SSR') omen.animate([{ opacity: 0.9 }, { opacity: 0 }], { duration: t(380), fill: 'forwards' });
+    openAura.animate([{ opacity: 0, transform: 'scale(.8)' }, { opacity: 1, transform: 'scale(1.1)' }],
+      { duration: t(380), easing: 'ease-out', fill: 'forwards' });
     await sleep(t(rarity === 'SSR' ? 1000 : 720)); // SSR は昇格を見せるぶん少し長い(従来の仮実装と同じ長さ)
     orb.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(1.14)' }],
       { duration: t(350), fill: 'forwards' });
