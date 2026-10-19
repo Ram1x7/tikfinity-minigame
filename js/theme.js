@@ -401,8 +401,10 @@ export function fitRouletteCard(wrap, { max = 60, min = 40 } = {}) {
   }
   text.style.overflowWrap = '';
   const lineH = parseFloat(getComputedStyle(text).lineHeight) || size * 1.22;
+  // 入る行数は、… にする前の(景品名の場所いっぱいの)高さで数える
+  const lines = Math.max(1, Math.floor((text.clientHeight + 1) / lineH));
   text.classList.add('is-clamped');
-  text.style.setProperty('--clamp-lines', String(Math.max(1, Math.floor((text.clientHeight + 1) / lineH))));
+  text.style.setProperty('--clamp-lines', String(lines));
   return { keptSender: Boolean(who && who.isConnected), clamped: true, size };
 }
 

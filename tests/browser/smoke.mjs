@@ -563,6 +563,36 @@ try {
     assert.ok(m.headerOpacity < 0.05, 'カード表示中は見出しの送信者名を隠す');
     assert.equal(m.visibleChips, 0, 'カードと同じ結果は一覧に出さない');
     assert.ok(m.inside, '結果カードが再生の枠に収まる');
+    // 景品名が入らないときの … は、景品名の場所いっぱいの行数で付ける
+    // (以前は … の書式を付けた後の高さで数えてしまい、4行入る場所でも2行で省いていた)
+    const clamp = await page.evaluate(async () => {
+      const { fitRouletteCard } = await import('/js/theme.js');
+      const wrap = document.createElement('div');
+      wrap.className = 'img-result img-result--banner';
+      wrap.style.cssText = 'position:absolute;left:0;top:0;width:900px;height:405px;aspect-ratio:auto;visibility:hidden';
+      const box = document.createElement('div');
+      box.className = 'img-result__box';
+      box.style.cssText = 'left:20%;right:20%;top:40px;bottom:auto;height:210px'; // 40px の文字(行の高さ 48.8px)で4行分
+      const text = document.createElement('div');
+      text.className = 'img-result__text';
+      text.textContent = '次の15分はコメントで指示された場所へ移動して、到着したら住民全員に笑顔であいさつして写真を撮り、そのあと島を一周してから元の場所へ戻って報告する';
+      box.append(text);
+      wrap.append(box);
+      document.getElementById('ev-play').append(wrap);
+      const r = fitRouletteCard(wrap, { max: 60, min: 40 });
+      const lineH = parseFloat(getComputedStyle(text).lineHeight);
+      const out = {
+        clamped: r.clamped, size: r.size, lines: Number(text.style.getPropertyValue('--clamp-lines')),
+        expected: Math.floor((box.clientHeight + 1) / lineH), shownLines: Math.round(text.offsetHeight / lineH),
+      };
+      wrap.remove();
+      return out;
+    });
+    assert.ok(clamp.clamped && clamp.size === 40, `最小 40px でも入らず … にする: ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.expected, 4, `確認用の場所は4行分: ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.lines, 4, `4行入る場所では4行で … にする(2行に減らさない): ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.shownLines, 4, `実際に4行見えている: ${JSON.stringify(clamp)}`);
+
     assert.deepEqual(errors, []);
     await page.close();
 
