@@ -265,7 +265,7 @@ function fitChip(li) {
 
 /** 結果カードが消えたら(次の抽選・次の項目)、カードに出ていた結果を一覧に出す */
 function showCardChips() {
-  eventEl.classList.remove('event--card');
+  eventEl.classList.remove('event--card', 'event--keep-sender');
   for (const li of resultsEl.querySelectorAll('.chip--in-card')) {
     li.classList.remove('chip--in-card');
     fitChip(li);
@@ -318,7 +318,7 @@ async function playItem(item) {
   const mode = item.mode === 'roulette' ? 'roulette' : 'gacha';
 
   eventEl.dataset.mode = mode;
-  eventEl.classList.remove('event--card'); // 前の項目の結果カードの表示をやめ、見出しの送信者名を出す
+  eventEl.classList.remove('event--card', 'event--keep-sender'); // 前の項目の結果カードの表示をやめ、見出しの送信者名を出す
   showSender(item.sender || '視聴者');
   giftEl.textContent = item.repeatCount > 1 ? `${item.giftName} ×${item.repeatCount}` : item.giftName;
   titleEl.textContent = item.title || '';
@@ -342,7 +342,17 @@ async function playItem(item) {
     countBase = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
     renderCount();
     showCardChips();
-    if (mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, theme });
+    if (mode === 'roulette') {
+      // 和風の横長の結果カード: カードが出たら景品名・レア度(と送信者名)はカードの中だけに出す。
+      // 景品名が長くてカードに送信者名を入れられなかったときは、見出しの送信者名を残す
+      await playRoulette(playEl, rolls[i], pool, {
+        speed, theme, sender: item.sender || '視聴者',
+        onCard: ({ sender } = {}) => {
+          eventEl.classList.add('event--card');
+          eventEl.classList.toggle('event--keep-sender', !sender);
+        },
+      });
+    }
     else if (theme) {
       // 和風の結果カード: カードが出たら、送信者名・景品名・レア度はカードの中だけに出す(theme.css の .event--card)
       await playGachaImage(playEl, rolls[i], {

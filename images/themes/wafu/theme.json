@@ -98,19 +98,14 @@
     "SSR": { "glow": 0.7, "aura": 1, "color": "#ffd27a", "rays": 0.4, "sakura": 18, "gold": 16, "duration": 2400 }
   },
   "roulette": {
-    "colors": [
-      "#f4ead2",
-      "#24386b",
-      "#d9a83a",
-      "#b8402e",
-      "#f2b9c8",
-      "#3d6b55",
-      "#e8d7b0",
-      "#5a3f7a"
-    ],
-    "line": "#c9a14a",
-    "highlight": "#ffffff",
-    "hub": "#1b2547"
+    "colors": ["#1c2b5e", "#4a1f3d", "#163f3c", "#3b2468", "#22306a", "#5a3a12", "#173a2e", "#2c1f55"],
+    "line": "#d9b45a",
+    "highlight": "#ffe9a8",
+    "hub": "#0f1530",
+    "text": "#fff6dc",
+    "textStroke": "#0a0e22",
+    "dim": 0.45,
+    "glow": "#ffd27a"
   },
   "orbParts": {
     "closed": "orb-closed.png",
@@ -133,5 +128,13 @@
     "label": { "left": 22, "right": 22, "top": 23.5, "bottom": 42.5 },
     "sub": { "left": 21, "right": 21, "top": 74.5, "bottom": 19.5 },
     "height": 880
+  },
+  "rouletteCard": {
+    "frames": { "N": "roulette-card-n.png", "R": "roulette-card-r.png", "SR": "roulette-card-sr.png", "SSR": "roulette-card-ssr.png" },
+    "body": { "left": 3, "right": 3, "top": 6, "bottom": 6 },
+    "text": { "left": 14, "right": 14, "top": 18, "bottom": 33 },
+    "sub": { "left": 12, "right": 12, "top": 71, "bottom": 16 },
+    "width": 900,
+    "ringOverlap": 0.3
   }
 }

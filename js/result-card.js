@@ -60,3 +60,42 @@ export function parseResultCard(manifest) {
     height: num(rc.height, 300, 1000, 880),
   };
 }
+
+// ------------------------------------------------------------
+// ルーレットの結果カード(横長)
+//   "rouletteCard": {
+//     "frames": { "N": "banner-n.png", "R": "banner-r.png", "SR": "banner-sr.png", "SSR": "banner-ssr.png" },
+//     "body":  { "left": 4, "right": 7, "top": 12, "bottom": 14 },
+//     "text":  { "left": 23, "right": 27, "top": 29, "bottom": 30 },
+//     "width": 900
+//   }
+//     frames  レア度ごとの枠の画像。レア度の印(バッジ)は画像の左に描かれている
+//     body    画像の中で枠の本体がある場所(外側の透明な余白を除く)
+//     text    景品名を置く場所(sub が無ければ送信者名も)。バッジ・桜を避けた範囲(画像に対する %)
+//     sub     送信者名を置く場所(景品名の下の帯)。省略すると text の中に送信者名を入れる
+//     width   カードの幅(px、1080×1920 の画面で)
+//     ringOverlap 止まった後、盤面の下側をカードで隠してよい割合(0〜0.45)。針(上)の当たりの扇形と
+//             中心は見えたままにして、盤面をできるだけ大きく残すために使う。省略時は外周の飾りのあたりだけ
+// 4枚すべて読み込めたときだけ使い、1枚でも欠ければ従来の結果枠(images.resultFrame)に戻す。
+// ------------------------------------------------------------
+const DEFAULT_ROULETTE_TEXT = { left: 23, right: 27, top: 29, bottom: 30 };
+
+/** theme.json の rouletteCard を読む。使えない設定なら null(従来の結果枠) */
+export function parseRouletteCard(manifest) {
+  const rc = manifest && manifest.rouletteCard;
+  if (!rc || typeof rc !== 'object' || !rc.frames || typeof rc.frames !== 'object') return null;
+  const frames = {};
+  for (const key of RESULT_CARD_RARITIES) {
+    const f = rc.frames[key] ?? rc.frames[key.toLowerCase()];
+    if (typeof f !== 'string' || !f) return null;
+    frames[key] = f;
+  }
+  return {
+    frames,
+    body: box(rc.body, NO_INSET),
+    text: box(rc.text, DEFAULT_ROULETTE_TEXT),
+    sub: box(rc.sub, null),
+    width: num(rc.width, 400, 1000, 900),
+    ringOverlap: num(rc.ringOverlap, 0, 0.45, null),
+  };
+}

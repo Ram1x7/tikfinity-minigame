@@ -505,7 +505,7 @@ try {
       ticker: document.querySelector('.roulette__ticker').getBoundingClientRect().top,
     }));
     assert.ok(tick.ticker >= tick.wheel, `候補名が盤面に重なっている: ${JSON.stringify(tick)}`);
-    // 止まった後は盤面を小さくして上に寄せ、結果枠は盤面の下側に少しだけ重ねる
+    // 止まった後は盤面を小さくして上に寄せ、結果カードは盤面の下側だけに重ねる(rouletteCard.ringOverlap)
     await waitOpaque('.roulette__result');
     // 盤面を CSS で回しても、針の下で止まる候補は抽選結果のまま
     const landed = await page.evaluate(() => ({
@@ -519,12 +519,99 @@ try {
     const stop = await page.evaluate(() => {
       const w = document.querySelector('.img-wheel').getBoundingClientRect();
       const r = document.querySelector('.roulette__result').getBoundingClientRect();
-      return { overlap: (w.bottom - r.top) / w.height };
+      const bodyTop = r.top + r.height * 0.06; // 結果カードの上の透明な余白(rouletteCard.body.top 6%)を除く
+      return { overlap: (w.bottom - bodyTop) / w.height, centerVisible: w.top + w.height / 2 < bodyTop };
     });
-    assert.ok(stop.overlap < 0.25, `結果枠が盤面を隠しすぎ: ${JSON.stringify(stop)}`);
+    // 仕様書: 盤面の下側 30% まで(針の下の当たりと中心は見えたまま)
+    assert.ok(stop.overlap <= 0.32, `結果カードが盤面を隠しすぎ: ${JSON.stringify(stop)}`);
+    assert.ok(stop.centerVisible, `盤面の中心が見えている: ${JSON.stringify(stop)}`);
     assert.deepEqual(errors, []);
     console.log('✔ 表示画面(和風): 画像・透過・コメント欄よけ・候補が多いルーレット(候補名は盤面の外、結果枠は盤面の下)');
     await page.close();
+  }
+
+  // ---------- 表示画面(和風ルーレット): 横長の結果カード・重複表示の整理・枠が欠けたときの従来の結果枠 ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=roulette&theme=wafu&rarity=SSR&speed=4`);
+    // 回転中は見出しに送信者名
+    await page.waitForSelector('.img-wheel', { timeout: 30000 });
+    assert.ok(Number(await page.evaluate(() => getComputedStyle(document.getElementById('ev-sender')).opacity)) > 0.95, '回転中は見出しに送信者名');
+    await page.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    await page.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) < 0.05, null, { timeout: 5000 }).catch(() => {});
+    const m = await page.evaluate(() => {
+      const res = document.querySelector('.roulette__result');
+      const r = (e) => e.getBoundingClientRect();
+      const play = r(document.querySelector('.event__play'));
+      const rr = r(res);
+      return {
+        banner: res.classList.contains('img-result--banner'),
+        frame: res.querySelector('.img-result__frame').getAttribute('src').split('/').pop(),
+        badge: res.querySelectorAll('.img-result__rarity').length,
+        sender: res.querySelector('.img-result__sender')?.textContent,
+        senderInBand: Boolean(res.querySelector('.img-result__sub > .img-result__sender')),
+        label: res.querySelector('.img-result__text').textContent,
+        landed: document.querySelector('.roulette').dataset.landed,
+        headerOpacity: Number(getComputedStyle(document.getElementById('ev-sender')).opacity),
+        visibleChips: [...document.querySelectorAll('.event__results .chip')].filter((e) => getComputedStyle(e).display !== 'none').length,
+        inside: rr.left >= play.left - 1 && rr.right <= play.right + 1 && rr.bottom <= play.bottom + 1,
+      };
+    });
+    assert.ok(m.banner && m.frame === 'roulette-card-ssr.png', `SSR の結果カード: ${m.frame}`);
+    assert.equal(m.badge, 0, 'HTML のバッジは重ねない(枠に描かれている)');
+    assert.equal(m.sender, 'みほん さん');
+    assert.ok(m.senderInBand, '送信者名は景品名の下の専用の帯');
+    assert.equal(m.label, m.landed, '針の下で止まった候補と結果カードが同じ');
+    assert.ok(m.headerOpacity < 0.05, 'カード表示中は見出しの送信者名を隠す');
+    assert.equal(m.visibleChips, 0, 'カードと同じ結果は一覧に出さない');
+    assert.ok(m.inside, '結果カードが再生の枠に収まる');
+    // 景品名が入らないときの … は、景品名の場所いっぱいの行数で付ける
+    // (以前は … の書式を付けた後の高さで数えてしまい、4行入る場所でも2行で省いていた)
+    const clamp = await page.evaluate(async () => {
+      const { fitRouletteCard } = await import('/js/theme.js');
+      const wrap = document.createElement('div');
+      wrap.className = 'img-result img-result--banner';
+      wrap.style.cssText = 'position:absolute;left:0;top:0;width:900px;height:405px;aspect-ratio:auto;visibility:hidden';
+      const box = document.createElement('div');
+      box.className = 'img-result__box';
+      box.style.cssText = 'left:20%;right:20%;top:40px;bottom:auto;height:210px'; // 40px の文字(行の高さ 48.8px)で4行分
+      const text = document.createElement('div');
+      text.className = 'img-result__text';
+      text.textContent = '次の15分はコメントで指示された場所へ移動して、到着したら住民全員に笑顔であいさつして写真を撮り、そのあと島を一周してから元の場所へ戻って報告する';
+      box.append(text);
+      wrap.append(box);
+      document.getElementById('ev-play').append(wrap);
+      const r = fitRouletteCard(wrap, { max: 60, min: 40 });
+      const lineH = parseFloat(getComputedStyle(text).lineHeight);
+      const out = {
+        clamped: r.clamped, size: r.size, lines: Number(text.style.getPropertyValue('--clamp-lines')),
+        expected: Math.floor((box.clientHeight + 1) / lineH), shownLines: Math.round(text.offsetHeight / lineH),
+      };
+      wrap.remove();
+      return out;
+    });
+    assert.ok(clamp.clamped && clamp.size === 40, `最小 40px でも入らず … にする: ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.expected, 4, `確認用の場所は4行分: ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.lines, 4, `4行入る場所では4行で … にする(2行に減らさない): ${JSON.stringify(clamp)}`);
+    assert.equal(clamp.shownLines, 4, `実際に4行見えている: ${JSON.stringify(clamp)}`);
+
+    assert.deepEqual(errors, []);
+    await page.close();
+
+    // 横長カードの枠が1枚でも読めなければ、従来の結果枠(重複表示の整理もしない)
+    const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await fb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await fb.route('**/roulette-card-n.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await fb.goto(`${base}/display.html?demo=roulette&theme=wafu&rarity=SSR&speed=4`);
+    await fb.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    assert.equal(await fb.locator('.img-result--banner').count(), 0);
+    assert.equal(await fb.locator('.roulette__result .img-result__rarity').count(), 1, '従来の結果枠はバッジを HTML で出す');
+    assert.equal(await fb.evaluate(() => document.getElementById('event').classList.contains('event--card')), false);
+    await fb.close();
+    console.log('✔ 表示画面(和風ルーレット): 横長の結果カード・重複表示の整理・枠が欠けたときの従来の結果枠');
   }
 
   // ---------- 表示画面(和風・初期値): コメント欄よけ 1100 で縮めても結果の文字が小さくなりすぎない ----------

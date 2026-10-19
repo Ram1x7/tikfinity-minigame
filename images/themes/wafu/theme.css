@@ -659,3 +659,74 @@
 .theme-wafu .event__sender { transition: opacity 0.3s ease; }
 .theme-wafu .event--card .event__sender { opacity: 0; }
 .theme-wafu .event__results .chip--in-card { display: none; }
+
+/* ================================================================
+ * 和風ルーレット: 横長の結果カード(theme.json の rouletteCard)
+ * 枠の内側は濃い色なので文字は明るい色。送信者名(小さく1行)と景品名を、
+ * 左のバッジ・右の桜を避けた場所(--rcard-text-*)に重ねる
+ * ================================================================ */
+.theme-wafu .img-result--banner {
+  width: var(--rcard-w, 900px);
+  aspect-ratio: var(--rcard-aspect, 10 / 3);
+}
+.theme-wafu .img-result__box {
+  position: absolute;
+  left: var(--rcard-text-left, 23%);
+  right: var(--rcard-text-right, 27%);
+  top: var(--rcard-text-top, 29%);
+  bottom: var(--rcard-text-bottom, 30%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+}
+.theme-wafu .img-result__sender {
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  color: #f3e3b3;
+  font-weight: 900;
+  line-height: 1.15;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+.theme-wafu .img-result--banner .img-result__text {
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  color: #fff6dc;
+  line-height: 1.22;
+  text-shadow: 0 3px 0 rgba(8, 12, 30, 0.85), 0 0 16px rgba(8, 12, 30, 0.9);
+}
+.theme-wafu .img-result--banner[data-rarity="SSR"] .img-result__text { color: #ffe9a8; }
+/* 景品名が長くてカードに送信者名を入れられなかったときは、見出しの送信者名を残す */
+.theme-wafu .event--card.event--keep-sender .event__sender { opacity: 1; }
+
+/* 針の下の候補名: 和紙ではなく、盤面・結果カードに合わせた濃い藍に金の縁 */
+.theme-wafu .roulette__ticker {
+  background: linear-gradient(180deg, #24315e, #121a3a);
+  color: #fff6dc;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}
+/* 景品名が最小の大きさでも入らないとき: 入る行数で末尾を … にする(全文は結果の一覧に出る) */
+.theme-wafu .img-result--banner .img-result__text.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp-lines, 2);
+  flex: 0 1 auto;
+  max-height: 100%;
+}
+/* 送信者名の専用の帯(theme.json の rouletteCard.sub)。景品名の下 */
+.theme-wafu .img-result__sub {
+  position: absolute;
+  left: var(--rcard-sub-left, 12%);
+  right: var(--rcard-sub-right, 12%);
+  top: var(--rcard-sub-top, 72%);
+  bottom: var(--rcard-sub-bottom, 15%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-wafu .img-result__sub .img-result__sender { max-width: 100%; }
