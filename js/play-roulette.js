@@ -9,7 +9,7 @@
 // 針の下の候補の「番号. 名前」を盤面の外(下)に大きく出す。
 // 止まった後は盤面を小さくして上に寄せ、空いた下側に結果枠を出す(盤面を大きく隠さない)。
 import { rarityColor, SLICE_COLORS, sleep } from './visual.js';
-import { img, resultFrame, fitText, textBoostOf, themeRarityColor } from './theme.js';
+import { img, resultFrame, rouletteCard, fitRouletteCard, fitText, textBoostOf, themeRarityColor } from './theme.js';
 import { playRarityEffect } from './effects.js';
 
 const SIZE = 1000; // 描画に使う座標の大きさ(実際の画素数は画面の倍率に合わせて決める)
@@ -36,6 +36,12 @@ function skinFor(theme) {
     highlight: r.highlight || '#ffffff',
     hub: r.hub || '#1b2547',
     radius: SIZE / 2 - 4, // 外周はリング画像の内側に隠れる
+    // 扇形の文字の色(省略時は背景の明るさから選ぶ)
+    text: typeof r.text === 'string' ? r.text : '',
+    textStroke: typeof r.textStroke === 'string' ? r.textStroke : '',
+    // 止まった後: 当たり以外の扇形を暗くする濃さ(0〜0.8)と、当たりの縁の光
+    dim: Math.min(0.8, Math.max(0, Number(r.dim) || 0)),
+    glow: typeof r.glow === 'string' ? r.glow : '',
   };
 }
 
@@ -142,7 +148,7 @@ function drawWheel(ctx, slices, plans, rotation, highlight, skin) {
 
     const plan = plans[i];
     if (plan.mode === 'number' && !plan.drawable) return;
-    const tc = textColorsFor(s.fill);
+    const tc = skin.text ? { fill: skin.text, stroke: skin.textStroke || '#14193a' } : textColorsFor(s.fill);
     ctx.save();
     ctx.rotate(s.start + s.sweep / 2);
     ctx.lineJoin = 'round';
@@ -168,6 +174,38 @@ function drawWheel(ctx, slices, plans, rotation, highlight, skin) {
     ctx.restore();
   });
 
+  // 止まった後: 当たり以外を少し暗くし、当たりの縁を光らせる(画像テーマで dim / glow があるとき)
+  if (highlight >= 0 && (skin.dim || skin.glow)) {
+    slices.forEach((s, i) => {
+      if (i === highlight || !skin.dim) return;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r, s.start, s.start + s.sweep);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(4, 6, 18, ${skin.dim})`;
+      ctx.fill();
+    });
+    if (skin.glow) {
+      const s = slices[highlight];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r - 6, s.start, s.start + s.sweep);
+      ctx.closePath();
+      ctx.shadowColor = skin.glow;
+      ctx.shadowBlur = 40;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = skin.glow;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#fffbe8';
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   // 中心
   ctx.beginPath();
   ctx.arc(0, 0, 70, 0, TWO_PI);
@@ -185,7 +223,7 @@ const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
  * theme が null なら従来デザイン、画像テーマなら盤面の上にリング・針の画像を重ねる。
  * size は円盤(画像テーマではリング画像)の表示サイズ(1080×1920 基準の px)。
  */
-export async function playRoulette(mount, roll, pool, { speed = 1, theme = null, size } = {}) {
+export async function playRoulette(mount, roll, pool, { speed = 1, theme = null, size, sender = '', onCard = () => {} } = {}) {
   const t = (ms) => ms / speed;
   const skin = skinFor(theme);
   const list = Array.isArray(pool) && pool.length > 0 ? pool : [roll];
@@ -220,7 +258,8 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
     wheel.className = 'img-wheel';
     placeWheel(size || 760);
     wheel.append(canvas, img(theme.images.ring, 'img-wheel__ring'), img(theme.images.pointer, 'img-wheel__pointer'));
-    result = resultFrame(theme, roll);
+    // 横長の結果カード(theme.json の rouletteCard)があればそれ、無ければ従来の結果枠
+    result = theme.rouletteCard ? rouletteCard(theme, roll, sender) : resultFrame(theme, roll);
     result.classList.add('roulette__result');
     wrap.append(wheel, ticker, result);
   } else {
@@ -309,24 +348,44 @@ export async function playRoulette(mount, roll, pool, { speed = 1, theme = null,
   wrap.dataset.landed = sliceAt(slices, endRot).label; // 確認用: 針の下で止まった候補
   ticker.hidden = true;
   const text = result.querySelector('.img-result__text');
-  if (text) fitText(text, Math.round(60 * textBoostOf(text)), 30);
+  const banner = Boolean(theme && theme.rouletteCard);
+  let fit = null;
+  if (banner) {
+    // 景品名の読みやすさを優先(入らなければカードの中の送信者名を外し、それでも入らなければ末尾を … にする)
+    const boost = textBoostOf(text);
+    fit = fitRouletteCard(result, { max: Math.round(60 * boost), min: 40 }); // 最小 40px(画面での見た目は縮めた倍率を掛けた大きさ)
+  } else if (text) fitText(text, Math.round(60 * textBoostOf(text)), 30);
   if (wheel) {
     // 盤面を小さくして上に寄せ、下に結果枠の場所を空ける(当たりの扇形と針は見えたまま)
     const playH = wrap.clientHeight;
     const frameH = result.offsetHeight;
-    const overlap = 70; // リングの下端(外周の飾りのあたり)にだけ結果枠が重なる
-    const k = Math.min(1, Math.max(0.45, (playH - frameH + overlap) / ringSize));
+    // リングの下端(外周の飾りのあたり)にだけ結果枠が重なる。横長カードは上の透明な余白の分も重ねてよい
+    const bodyTop = banner ? theme.rouletteCard.body.top / 100 : 0;
+    const ringOverlap = banner ? theme.rouletteCard.ringOverlap : null;
+    // ringOverlap があれば、盤面の下側をその割合までカードで隠す(当たりは針のある上側なので見えたまま)
+    const k = ringOverlap != null
+      ? Math.min(1, Math.max(0.45, (playH - frameH + frameH * bodyTop) / (ringSize * (1 - ringOverlap))))
+      : Math.min(1, Math.max(0.45, (playH - frameH + 70 + Math.round(frameH * bodyTop)) / ringSize));
     wheel.animate(
       [{ transform: 'scale(1)' }, { transform: `scale(${k})` }],
       { duration: t(420), easing: 'ease-in-out', fill: 'forwards' }
     );
     await sleep(t(200));
     // レア度別の演出(結果枠のまわり。終わると自動で消える)
+    const b = banner ? theme.rouletteCard.body : { left: 0, right: 0, top: 0, bottom: 0 };
+    const rw = result.offsetWidth;
+    const rh = result.offsetHeight;
     playRarityEffect(wrap, theme, roll.rarity, {
       color: themeRarityColor(theme, roll.rarity, roll.color), speed,
-      focus: { x: result.offsetLeft - result.offsetWidth / 2, y: result.offsetTop, w: result.offsetWidth, h: result.offsetHeight },
+      focus: {
+        x: result.offsetLeft - rw / 2 + rw * b.left / 100, y: result.offsetTop + rh * b.top / 100,
+        w: rw * (1 - (b.left + b.right) / 100), h: rh * (1 - (b.top + b.bottom) / 100),
+      },
     });
   }
+  // 結果カードが現れた(表示画面が、カードと重複する見出しの文字・一覧を隠す)。
+  // 景品名を … で省いたときも一覧には出さない(重複表示を避ける。素材の文字の場所で解決する)
+  if (fit) onCard({ sender: fit.keptSender });
   await result.animate(
     [{ opacity: 0, transform: 'translateX(-50%) scale(.7)' }, { opacity: 1, transform: 'translateX(-50%) scale(1.06)' }, { opacity: 1, transform: 'translateX(-50%) scale(1)' }],
     { duration: t(400), easing: 'ease-out', fill: 'forwards' }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseResultCard } from '../js/result-card.js';
+import { parseResultCard, parseRouletteCard } from '../js/result-card.js';
 
 const wafu = JSON.parse(readFileSync(new URL('../images/themes/wafu/theme.json', import.meta.url), 'utf8'));
 
@@ -32,4 +32,14 @@ test('結果カード: 4枚そろわない・設定が無い・不正な値', ()
   assert.equal(rc.sub, null, '上下が重なる枠は使わない');
   assert.equal(rc.height, 880, '大きすぎる高さは既定値');
   assert.deepEqual(rc.body, { left: 0, right: 0, top: 0, bottom: 0 });
+});
+
+test('和風ルーレットの横長カード: レア度ごとの枠と文字の場所', () => {
+  const rc = parseRouletteCard(wafu);
+  assert.deepEqual(rc.frames, { N: 'banner-n.png', R: 'banner-r.png', SR: 'banner-sr.png', SSR: 'banner-ssr.png' });
+  // 文字の場所は左のバッジ(画像の 22% まで)と右の桜(74% から)を避ける
+  assert.ok(rc.text.left >= 22 && 100 - rc.text.right <= 74, `文字の場所 ${JSON.stringify(rc.text)}`);
+  assert.ok(rc.width <= 988, '台紙の内側の幅に収まる');
+  assert.equal(parseRouletteCard({ rouletteCard: { frames: { N: 'a.png' } } }), null, '4枚そろわなければ従来の結果枠');
+  assert.equal(parseRouletteCard({}), null);
 });

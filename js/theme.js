@@ -14,7 +14,7 @@
 import { rarityColor } from './visual.js';
 import { setPhrased } from './text.js';
 import { parseOrb, ORB_PARTS } from './orb.js';
-import { parseResultCard, RESULT_CARD_RARITIES } from './result-card.js';
+import { parseResultCard, parseRouletteCard, RESULT_CARD_RARITIES } from './result-card.js';
 
 const THEMES_BASE = new URL('../images/themes/', import.meta.url);
 
@@ -129,6 +129,7 @@ export async function loadTheme(name) {
     orbFixes: {},   // 素材の切れ端を隠す暫定の補正(js/orb.js)
     orbRarity: {},  // レア度ごとに開いたときに出す光の部品
     resultCard: null, // レア度ごとの結果カード(js/result-card.js)。4枚そろわなければ null(従来の札)
+    rouletteCard: null, // ルーレットの横長の結果カード。4枚そろわなければ null(従来の結果枠)
     rarity: Object.fromEntries(Object.entries((manifest.images || {}).rarity || {}).map(([k, v]) => [k.toUpperCase(), url(v)])),
     icons: (manifest.icons || []).map((i) => ({ src: url(i.file), words: i.words || [] })),
     geometry: manifest.geometry || {},
@@ -144,7 +145,9 @@ export async function loadTheme(name) {
   const orbUrls = Object.fromEntries(Object.entries(orb.files).map(([key, file]) => [key, url(file)]));
   const resultCard = parseResultCard(manifest);
   const cardFrameUrls = resultCard ? Object.fromEntries(Object.entries(resultCard.frames).map(([k, f]) => [k, url(f)])) : {};
-  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src), ...Object.values(orbUrls), ...Object.values(cardFrameUrls)];
+  const rouletteCard = parseRouletteCard(manifest);
+  const bannerUrls = rouletteCard ? Object.fromEntries(Object.entries(rouletteCard.frames).map(([k, f]) => [k, url(f)])) : {};
+  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src), ...Object.values(orbUrls), ...Object.values(cardFrameUrls), ...Object.values(bannerUrls)];
   const [, loaded] = await Promise.all([
     Promise.all(styles.map(loadStylesheet)),
     Promise.all(allImages.map(async (src) => [src, await loadImage(src)])),
@@ -159,6 +162,10 @@ export async function loadTheme(name) {
   if (resultCard && RESULT_CARD_RARITIES.every((k) => imgs.get(cardFrameUrls[k]))) {
     const first = imgs.get(cardFrameUrls.N);
     theme.resultCard = { ...resultCard, frames: cardFrameUrls, aspect: first.naturalWidth / first.naturalHeight };
+  }
+  if (rouletteCard && RESULT_CARD_RARITIES.every((k) => imgs.get(bannerUrls[k]))) {
+    const first = imgs.get(bannerUrls.N);
+    theme.rouletteCard = { ...rouletteCard, frames: bannerUrls, aspect: first.naturalWidth / first.naturalHeight };
   }
 
   // 札の窓・リングの穴の位置(theme.json で "auto" なら画像から測る)
@@ -245,6 +252,17 @@ export async function loadTheme(name) {
     }
   }
 
+  // ルーレットの横長の結果カード: 文字を置く場所(画像に対する %)と幅
+  if (theme.rouletteCard) {
+    const rc = theme.rouletteCard;
+    css.setProperty('--rcard-w', `${rc.width}px`);
+    css.setProperty('--rcard-aspect', String(rc.aspect));
+    for (const side of ['left', 'right', 'top', 'bottom']) {
+      css.setProperty(`--rcard-text-${side}`, `${rc.text[side]}%`);
+      if (rc.sub) css.setProperty(`--rcard-sub-${side}`, `${rc.sub[side]}%`);
+    }
+  }
+
   document.body.classList.add('theme-image', `theme-${name}`);
   if (document.fonts) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]);
   return theme;
@@ -324,6 +342,68 @@ export function fitText(el, maxPx, minPx, { oneLine = false } = {}) {
   // 最小の大きさでも入らない長い語は、途中で折り返して見切れないようにする
   if (!oneLine && !fits()) el.style.overflowWrap = 'anywhere';
   return size;
+}
+
+/**
+ * ルーレットの横長の結果カード(レア度ごとの枠)。枠の中に送信者名(小さく1行)と景品名を重ねる。
+ * レア度の印は枠の画像に描かれているので、HTML のバッジは出さない。文字の大きさは fitRouletteCard で合わせる
+ */
+export function rouletteCard(theme, roll, sender) {
+  const rc = theme.rouletteCard;
+  const key = String(roll.rarity || 'N').toUpperCase();
+  const wrap = document.createElement('div');
+  wrap.className = 'img-result img-result--banner';
+  wrap.dataset.rarity = key;
+  wrap.style.setProperty('--rarity', themeRarityColor(theme, roll.rarity, roll.color));
+  const box = document.createElement('div');
+  box.className = 'img-result__box';
+  const text = document.createElement('div');
+  text.className = 'img-result__text';
+  setPhrased(text, roll.label);
+  box.append(text);
+  wrap.append(img(rc.frames[key] || rc.frames.N, 'img-result__frame'), box);
+  if (sender) {
+    // 送信者名は景品名の下。専用の帯(sub)があればそこ、無ければ景品名と同じ場所の下側
+    const who = document.createElement('div');
+    who.className = 'img-result__sender';
+    who.textContent = `${sender} さん`;
+    if (rc.sub) {
+      const sub = document.createElement('div');
+      sub.className = 'img-result__sub';
+      sub.append(who);
+      wrap.append(sub);
+    } else box.append(who);
+  }
+  return wrap;
+}
+
+/**
+ * 横長の結果カードの文字の大きさを合わせる。景品名の読みやすさを優先し、最小の大きさ(min)より小さくしない。
+ *   1. 送信者名(1行)と景品名を入れる
+ *   2. 景品名が入らなければ、カードの中の送信者名を外して景品名に場所を回す(keptSender: false。見出しの送信者名を残す)
+ *   3. それでも入らなければ、入る行数で末尾を … にする(clamped: true)
+ * 3 になるのは、素材の文字の場所(左のバッジと右の桜のあいだ)が足りないとき。
+ */
+export function fitRouletteCard(wrap, { max = 60, min = 40 } = {}) {
+  const text = wrap.querySelector('.img-result__text');
+  const who = wrap.querySelector('.img-result__sender');
+  if (who) fitText(who, 34, 26, { oneLine: true });
+  // fitText は最小でも入らないと途中で折る(overflowWrap: anywhere)。文節で折れて入ったときだけ「入った」とする
+  const fitsNow = () => text.style.overflowWrap !== 'anywhere'
+    && text.scrollHeight <= text.clientHeight + 1 && text.scrollWidth <= text.clientWidth + 1;
+  let size = fitText(text, max, min);
+  if (fitsNow()) return { keptSender: Boolean(who), clamped: false, size };
+  // 送信者名が専用の帯にあるときは、景品名の場所は変わらないので外さない
+  if (who && !who.parentElement.classList.contains('img-result__sub')) {
+    who.remove();
+    size = fitText(text, max, min);
+    if (fitsNow()) return { keptSender: false, clamped: false, size };
+  }
+  text.style.overflowWrap = '';
+  const lineH = parseFloat(getComputedStyle(text).lineHeight) || size * 1.22;
+  text.classList.add('is-clamped');
+  text.style.setProperty('--clamp-lines', String(Math.max(1, Math.floor((text.clientHeight + 1) / lineH))));
+  return { keptSender: Boolean(who && who.isConnected), clamped: true, size };
 }
 
 /** 結果枠(画像)+レア度+文言(+アイコン)。ルーレットの結果表示に使う */

@@ -527,6 +527,58 @@ try {
     await page.close();
   }
 
+  // ---------- 表示画面(和風ルーレット): 横長の結果カード・重複表示の整理・枠が欠けたときの従来の結果枠 ----------
+  {
+    const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await page.goto(`${base}/display.html?demo=roulette&theme=wafu&rarity=SSR&speed=4`);
+    // 回転中は見出しに送信者名
+    await page.waitForSelector('.img-wheel', { timeout: 30000 });
+    assert.ok(Number(await page.evaluate(() => getComputedStyle(document.getElementById('ev-sender')).opacity)) > 0.95, '回転中は見出しに送信者名');
+    await page.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    await page.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) < 0.05, null, { timeout: 5000 }).catch(() => {});
+    const m = await page.evaluate(() => {
+      const res = document.querySelector('.roulette__result');
+      const r = (e) => e.getBoundingClientRect();
+      const play = r(document.querySelector('.event__play'));
+      const rr = r(res);
+      return {
+        banner: res.classList.contains('img-result--banner'),
+        frame: res.querySelector('.img-result__frame').getAttribute('src').split('/').pop(),
+        badge: res.querySelectorAll('.img-result__rarity').length,
+        sender: res.querySelector('.img-result__sender')?.textContent,
+        label: res.querySelector('.img-result__text').textContent,
+        landed: document.querySelector('.roulette').dataset.landed,
+        headerOpacity: Number(getComputedStyle(document.getElementById('ev-sender')).opacity),
+        visibleChips: [...document.querySelectorAll('.event__results .chip')].filter((e) => getComputedStyle(e).display !== 'none').length,
+        inside: rr.left >= play.left - 1 && rr.right <= play.right + 1 && rr.bottom <= play.bottom + 1,
+      };
+    });
+    assert.ok(m.banner && m.frame === 'banner-ssr.png', `SSR の横長カード: ${m.frame}`);
+    assert.equal(m.badge, 0, 'HTML のバッジは重ねない(枠に描かれている)');
+    assert.equal(m.sender, 'みほん さん');
+    assert.equal(m.label, m.landed, '針の下で止まった候補と結果カードが同じ');
+    assert.ok(m.headerOpacity < 0.05, 'カード表示中は見出しの送信者名を隠す');
+    assert.equal(m.visibleChips, 0, 'カードと同じ結果は一覧に出さない');
+    assert.ok(m.inside, '結果カードが再生の枠に収まる');
+    assert.deepEqual(errors, []);
+    await page.close();
+
+    // 横長カードの枠が1枚でも読めなければ、従来の結果枠(重複表示の整理もしない)
+    const fb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await fb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await fb.route('**/banner-n.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await fb.goto(`${base}/display.html?demo=roulette&theme=wafu&rarity=SSR&speed=4`);
+    await fb.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    assert.equal(await fb.locator('.img-result--banner').count(), 0);
+    assert.equal(await fb.locator('.roulette__result .img-result__rarity').count(), 1, '従来の結果枠はバッジを HTML で出す');
+    assert.equal(await fb.evaluate(() => document.getElementById('event').classList.contains('event--card')), false);
+    await fb.close();
+    console.log('✔ 表示画面(和風ルーレット): 横長の結果カード・重複表示の整理・枠が欠けたときの従来の結果枠');
+  }
+
   // ---------- 表示画面(和風・初期値): コメント欄よけ 1100 で縮めても結果の文字が小さくなりすぎない ----------
   {
     const page = await browser.newPage({ viewport: { width: 540, height: 960 } });
