@@ -346,7 +346,7 @@ async function playItem(item) {
       // 和風の横長の結果カード: カードが出たら景品名・レア度(と送信者名)はカードの中だけに出す。
       // 景品名が長くてカードに送信者名を入れられなかったときは、見出しの送信者名を残す
       await playRoulette(playEl, rolls[i], pool, {
-        speed, theme, sender: item.sender || '視聴者',
+        speed, theme, size: theme?.name === 'wafu' ? 680 : undefined, sender: item.sender || '視聴者',
         onCard: ({ sender } = {}) => {
           eventEl.classList.add('event--card');
           eventEl.classList.toggle('event--keep-sender', !sender);
