@@ -123,6 +123,7 @@ export async function loadTheme(name) {
     images: Object.fromEntries(Object.entries(manifest.images || {})
       .filter(([k]) => k !== 'rarity')
       .map(([k, v]) => [k, url(v)])),
+    orbParts: null, // 全画像が揃うまでは従来の開封画像に戻す
     rarity: Object.fromEntries(Object.entries((manifest.images || {}).rarity || {}).map(([k, v]) => [k.toUpperCase(), url(v)])),
     icons: (manifest.icons || []).map((i) => ({ src: url(i.file), words: i.words || [] })),
     geometry: manifest.geometry || {},
@@ -134,12 +135,18 @@ export async function loadTheme(name) {
   };
 
   const styles = [manifest.css ? url(manifest.css) : null, ...(manifest.fonts || [])].filter(Boolean);
-  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src)];
+  const orbUrls = Object.fromEntries(Object.entries(manifest.orbParts || {}).map(([key, file]) => [key, url(file)]));
+  const allImages = [...Object.values(theme.images), ...Object.values(theme.rarity), ...theme.icons.map((i) => i.src), ...Object.values(orbUrls)];
   const [, loaded] = await Promise.all([
     Promise.all(styles.map(loadStylesheet)),
     Promise.all(allImages.map(async (src) => [src, await loadImage(src)])),
   ]);
   const imgs = new Map(loaded);
+  // 透過パーツが揃わない状態で半端な開封をしない。全7枚が読み込めた場合のみ有効。
+  const requiredOrb = ['closed', 'lid', 'base', 'core', 'energy', 'petals', 'sparkles'];
+  if (requiredOrb.every((key) => orbUrls[key] && imgs.get(orbUrls[key]))) {
+    theme.orbParts = orbUrls;
+  }
 
   // 札の窓・リングの穴の位置(theme.json で "auto" なら画像から測る)
   const g = theme.geometry;
