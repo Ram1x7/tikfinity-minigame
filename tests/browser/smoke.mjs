@@ -417,7 +417,39 @@ try {
     assert.equal(await fb.locator('.img-gacha__capsule').count(), 2, '従来の玉(閉じた・開いた)');
     await fb.waitForSelector('.img-card.sheen', { timeout: 20000 });
     await fb.close();
-    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格・N の控えめな光)と、部品が欠けたときの従来演出');
+    // レア度ごとの結果カード: SSR の枠・送信者名(HTML の文字)。バッジは枠の画像に描かれているので重ねない
+    const rcPage = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await rcPage.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await rcPage.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SR&speed=4`);
+    await rcPage.waitForSelector('.img-card.sheen', { timeout: 30000 });
+    const rcm = await rcPage.evaluate(() => {
+      const c = document.querySelector('.img-card');
+      const r = (e) => e.getBoundingClientRect();
+      const play = r(document.querySelector('.event__play'));
+      const cr = r(c);
+      return {
+        framed: c.classList.contains('img-card--framed'),
+        frame: c.querySelector('.img-card__frame').getAttribute('src').split('/').pop(),
+        badge: c.querySelectorAll('.img-card__rarity').length,
+        sub: c.querySelector('.img-card__sub-text')?.textContent,
+        bodyTop: cr.top + cr.height * 0.077, bodyBottom: cr.bottom - cr.height * 0.096, playTop: play.top, playBottom: play.bottom,
+      };
+    });
+    assert.ok(rcm.framed && rcm.frame === 'card-sr.png', `SR の枠: ${rcm.frame}`);
+    assert.equal(rcm.badge, 0, 'HTML のバッジは重ねない');
+    assert.equal(rcm.sub, 'ためしユーザー さん');
+    assert.ok(rcm.bodyTop >= rcm.playTop - 1 && rcm.bodyBottom <= rcm.playBottom + 1, `札の本体が再生の枠に収まる: ${JSON.stringify(rcm)}`);
+    await rcPage.close();
+    // 枠が1枚でも読めなければ従来の札
+    const rcFb = await browser.newPage({ viewport: { width: 540, height: 960 } });
+    await rcFb.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
+    await rcFb.route('**/card-ssr.png', (r) => r.fulfill({ status: 404, body: '' }));
+    await rcFb.goto(`${base}/display.html?demo=gacha&theme=wafu&rarity=SR&speed=4`);
+    await rcFb.waitForSelector('.img-card.sheen', { timeout: 30000 });
+    assert.equal(await rcFb.locator('.img-card--framed').count(), 0, '枠が欠けたら従来の札');
+    assert.equal(await rcFb.locator('.img-card .img-card__rarity').count(), 1, '従来の札はバッジを HTML で出す');
+    await rcFb.close();
+    console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格・N の控えめな光)・レア度ごとの結果カードと、部品が欠けたときの従来演出');
   }
 
   // ---------- 表示画面(和風テーマ): 画像・文字・透過、コメント欄よけ、候補が多いルーレット ----------

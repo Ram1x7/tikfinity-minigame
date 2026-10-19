@@ -324,7 +324,7 @@ async function playItem(item) {
     countBase = rolls.length > 1 ? `${i + 1} / ${rolls.length} 回目` : '';
     renderCount();
     if (mode === 'roulette') await playRoulette(playEl, rolls[i], pool, { speed, theme });
-    else if (theme) await playGachaImage(playEl, rolls[i], { speed, theme });
+    else if (theme) await playGachaImage(playEl, rolls[i], { speed, theme, sender: item.sender || '視聴者' });
     else await playGacha(playEl, rolls[i], { speed });
     addChip(rolls[i]);
     await sleep(RESULT_HOLD_MS);

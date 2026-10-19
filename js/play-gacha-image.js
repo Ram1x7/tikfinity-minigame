@@ -7,7 +7,7 @@ import { playRarityEffect } from './effects.js';
 import { setPhrased } from './text.js';
 import { orbLayersFor } from './orb.js';
 
-export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
+export async function playGachaImage(mount, roll, { speed = 1, theme, sender = '' } = {}) {
   const t = (ms) => ms / speed;
   const color = themeRarityColor(theme, roll.rarity, roll.color);
 
@@ -50,18 +50,41 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   }
 
   // 札: 画像の枠 + 窓の位置に和紙の下地と文字を重ねる
+  // テーマにレア度ごとの結果カード(theme.json の resultCard)があれば、その枠に文字を重ねる。
+  // レア度の印は枠の画像に描かれているので、HTML のバッジは出さない
+  const rc = theme.resultCard;
+  const rarityKey = String(roll.rarity || 'N').toUpperCase();
   const card = document.createElement('div');
-  card.className = 'img-card';
-  card.dataset.rarity = String(roll.rarity || 'N').toUpperCase();
+  card.className = rc ? 'img-card img-card--framed' : 'img-card';
+  card.dataset.rarity = rarityKey;
   const windowEl = document.createElement('div');
   windowEl.className = 'img-card__window';
   const label = document.createElement('div');
   label.className = 'img-card__label';
   setPhrased(label, roll.label); // 文節に近いまとまりで折り返す(iPad の WebKit でも)
-  windowEl.append(rarityBadge(theme, roll.rarity, 'img-card__rarity'), label);
   const icon = iconFor(theme, roll.label);
-  if (icon) windowEl.append(img(icon, 'img-card__icon'));
-  card.append(windowEl, img(theme.images.cardFrame, 'img-card__frame'));
+  let subEl = null;
+  if (rc) {
+    const frameSrc = rc.frames[rarityKey] || rc.frames.N;
+    card.style.setProperty('--img-card-frame', `url("${frameSrc}")`); // 光沢を枠の形の中だけに走らせる
+    windowEl.append(label);
+    if (icon) windowEl.append(img(icon, 'img-card__icon'));
+    card.append(img(frameSrc, 'img-card__frame'), windowEl);
+    if (rc.sub && sender) {
+      // 下の枠: 誰の結果か(送信者名)
+      subEl = document.createElement('div');
+      subEl.className = 'img-card__sub';
+      const name = document.createElement('span');
+      name.className = 'img-card__sub-text';
+      name.textContent = `${sender} さん`;
+      subEl.append(name);
+      card.append(subEl);
+    }
+  } else {
+    windowEl.append(rarityBadge(theme, roll.rarity, 'img-card__rarity'), label);
+    if (icon) windowEl.append(img(icon, 'img-card__icon'));
+    card.append(windowEl, img(theme.images.cardFrame, 'img-card__frame'));
+  }
 
   wrap.append(glow, ...(orb ? [orb] : [closed, open]), card);
   mount.replaceChildren(wrap);
@@ -139,16 +162,30 @@ export async function playGachaImage(mount, roll, { speed = 1, theme } = {}) {
   card.style.opacity = '1';
   // 台紙を縮めているときは、そのぶん大きめから合わせる(入りきらなければ従来どおり小さくする)
   fitText(label, Math.round(62 * textBoostOf(label)), 28);
+  if (subEl) fitText(subEl.firstChild, 46, 28, { oneLine: true }); // 入らなければ末尾を … にする(名前の全文は上の見出し)
   card.style.visibility = '';
   card.style.opacity = '';
   card.classList.add('sheen'); // 現れたときに枠の金に光が1回走る(theme.css)
   // レア度別の演出(再生の枠の中だけ。終わると自動で消える)
   playRarityEffect(wrap, theme, roll.rarity, {
     color, speed,
-    focus: { x: card.offsetLeft, y: card.offsetTop, w: card.offsetWidth, h: card.offsetHeight },
+    focus: cardBody(card, rc && rc.body),
   });
   await card.animate(
     [{ opacity: 0, transform: 'translateY(40px) scale(.7) rotateY(80deg)' }, { opacity: 1, transform: 'translateY(0) scale(1.04) rotateY(0)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: t(520), easing: 'ease-out', fill: 'forwards' }
   ).finished;
+}
+
+/** 札の本体の位置(再生の枠の中の px)。枠の画像に透明な余白があれば、その分を除く */
+function cardBody(card, inset) {
+  const b = inset || { left: 0, right: 0, top: 0, bottom: 0 };
+  const w = card.offsetWidth;
+  const h = card.offsetHeight;
+  return {
+    x: card.offsetLeft + w * b.left / 100,
+    y: card.offsetTop + h * b.top / 100,
+    w: w * (1 - (b.left + b.right) / 100),
+    h: h * (1 - (b.top + b.bottom) / 100),
+  };
 }

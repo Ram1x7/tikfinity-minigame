@@ -597,3 +597,57 @@
 .theme-wafu .fx[data-rarity="N"] .fx__gold { background: linear-gradient(135deg, #ffffff, #d5dce8 60%, #8e98aa); }
 .theme-wafu .fx[data-rarity="R"] .fx__gold { background: linear-gradient(135deg, #f0fffb, #74d9c9 60%, #2f8f78); }
 .theme-wafu .fx[data-rarity="SR"] .fx__gold { background: linear-gradient(135deg, #fbf1ff, #c49af0 60%, #7a45b8); }
+
+/* ================================================================
+ * 第2段階: レア度ごとの結果カード(theme.json の resultCard)
+ * 枠の内側は濃い色なので、文字は明るい色にする。文字の場所は画像に対する %
+ * (--rc-label-* / --rc-sub-*。js/theme.js が theme.json から入れる)
+ * ================================================================ */
+.theme-wafu .img-card--framed {
+  --card-h: var(--rc-h, 880px);
+  aspect-ratio: var(--rc-aspect, 5 / 6);
+}
+.theme-wafu .img-card--framed[data-rarity] .img-card__window {
+  left: var(--rc-label-left, 17.5%);
+  right: var(--rc-label-right, 17.5%);
+  top: var(--rc-label-top, 21%);
+  bottom: var(--rc-label-bottom, 42%);
+  padding: 0;
+  gap: 14px;
+  background: none;
+  box-shadow: none;
+}
+.theme-wafu .img-card--framed .img-card__label {
+  padding: 0;
+  color: #fff6dc;
+  /* 枠の内側の濃い色の上で読みやすく。金の縁取りの代わりに影 */
+  text-shadow: 0 3px 0 rgba(8, 12, 30, 0.85), 0 0 18px rgba(8, 12, 30, 0.9);
+  line-height: 1.3;
+}
+.theme-wafu .img-card--framed[data-rarity="SSR"] .img-card__label { color: #ffe9a8; }
+.theme-wafu .img-card--framed .img-card__icon {
+  width: 84px;
+  height: 84px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+}
+.theme-wafu .img-card__sub {
+  position: absolute;
+  left: var(--rc-sub-left, 19%);
+  right: var(--rc-sub-right, 19%);
+  top: var(--rc-sub-top, 73.5%);
+  bottom: var(--rc-sub-bottom, 19%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-wafu .img-card__sub-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #f3e3b3;
+  font-weight: 900;
+  line-height: 1.2;
+  text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
+}

@@ -126,5 +126,12 @@
     "R": ["core", "energy"],
     "SR": ["core", "energy", "petals"],
     "SSR": ["core", "energy", "petals", "sparkles", "dust"]
+  },
+  "resultCard": {
+    "frames": { "N": "card-n.png", "R": "card-r.png", "SR": "card-sr.png", "SSR": "card-ssr.png" },
+    "body": { "left": 9.6, "right": 9.7, "top": 7.7, "bottom": 9.6 },
+    "label": { "left": 22, "right": 22, "top": 23.5, "bottom": 42.5 },
+    "sub": { "left": 21, "right": 21, "top": 74.5, "bottom": 19.5 },
+    "height": 880
   }
 }
