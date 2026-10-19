@@ -85,17 +85,59 @@
     },
     "cardWiden": {
       "aspect": 0.92,
-      "stretch": [[30, 44], [56, 70]]
+      "stretch": [
+        [
+          30,
+          44
+        ],
+        [
+          56,
+          70
+        ]
+      ]
     },
     "cardTextSide": 19.5
   },
-  "rarityColors": { "N": "#6b7482", "R": "#2f8f5b", "SR": "#8b4fd0", "SSR": "#d9a536" },
+  "rarityColors": {
+    "N": "#6b7482",
+    "R": "#2f8f5b",
+    "SR": "#8b4fd0",
+    "SSR": "#d9a536"
+  },
   "badgeStyle": "text",
   "effects": {
-    "N": { "glow": 0, "aura": 0, "rays": 0, "sakura": 0, "gold": 0, "duration": 0 },
-    "R": { "glow": 0.3, "aura": 0.6, "rays": 0, "sakura": 0, "gold": 4, "duration": 1200 },
-    "SR": { "glow": 0.45, "aura": 0.75, "rays": 0, "sakura": 8, "gold": 6, "duration": 1600 },
-    "SSR": { "glow": 0.6, "aura": 0.9, "rays": 0.3, "sakura": 14, "gold": 10, "duration": 2000 }
+    "N": {
+      "glow": 0,
+      "aura": 0,
+      "rays": 0,
+      "sakura": 0,
+      "gold": 0,
+      "duration": 0
+    },
+    "R": {
+      "glow": 0.3,
+      "aura": 0.6,
+      "rays": 0,
+      "sakura": 0,
+      "gold": 4,
+      "duration": 1200
+    },
+    "SR": {
+      "glow": 0.45,
+      "aura": 0.75,
+      "rays": 0,
+      "sakura": 8,
+      "gold": 6,
+      "duration": 1600
+    },
+    "SSR": {
+      "glow": 0.6,
+      "aura": 0.9,
+      "rays": 0.3,
+      "sakura": 14,
+      "gold": 10,
+      "duration": 2000
+    }
   },
   "roulette": {
     "colors": [
@@ -111,5 +153,14 @@
     "line": "#c9a14a",
     "highlight": "#ffffff",
     "hub": "#1b2547"
+  },
+  "orbParts": {
+    "closed": "orb-closed.png",
+    "lid": "orb-open-lid.png",
+    "base": "orb-open-base.png",
+    "core": "orb-core.png",
+    "energy": "orb-energy.png",
+    "petals": "orb-petals.png",
+    "sparkles": "orb-sparkles.png"
   }
 }
