@@ -7,7 +7,7 @@ import { playRarityEffect } from './effects.js';
 import { setPhrased } from './text.js';
 import { orbLayersFor } from './orb.js';
 
-export async function playGachaImage(mount, roll, { speed = 1, theme, sender = '' } = {}) {
+export async function playGachaImage(mount, roll, { speed = 1, theme, sender = '', onCard = () => {} } = {}) {
   const t = (ms) => ms / speed;
   const color = themeRarityColor(theme, roll.rarity, roll.color);
 
@@ -165,6 +165,7 @@ export async function playGachaImage(mount, roll, { speed = 1, theme, sender = '
   if (subEl) fitText(subEl.firstChild, 46, 28, { oneLine: true }); // 入らなければ末尾を … にする(名前の全文は上の見出し)
   card.style.visibility = '';
   card.style.opacity = '';
+  onCard(); // 札が現れた(表示画面が、札と重複する見出しの文字を隠す)
   card.classList.add('sheen'); // 現れたときに枠の金に光が1回走る(theme.css)
   // レア度別の演出(再生の枠の中だけ。終わると自動で消える)
   playRarityEffect(wrap, theme, roll.rarity, {

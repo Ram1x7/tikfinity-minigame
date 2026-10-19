@@ -651,3 +651,11 @@
   line-height: 1.2;
   text-shadow: 0 2px 0 rgba(8, 12, 30, 0.85);
 }
+
+/* 結果カードが出ているあいだは、送信者名・景品名・レア度をカードの中だけに出す
+ * (.event--card は js/display.js が、レア度ごとの結果カードを使う和風ガチャのときだけ付ける)。
+ *   - 見出しの送信者名: 宝珠の開封中は出し、カードが出たら薄く消す(場所は残して札の位置を動かさない)
+ *   - 結果の一覧: カードに出ている最新の1件だけ隠す(次の抽選が始まったら一覧に出る) */
+.theme-wafu .event__sender { transition: opacity 0.3s ease; }
+.theme-wafu .event--card .event__sender { opacity: 0; }
+.theme-wafu .event__results .chip--in-card { display: none; }

@@ -439,6 +439,17 @@ try {
     assert.equal(rcm.badge, 0, 'HTML のバッジは重ねない');
     assert.equal(rcm.sub, 'ためしユーザー さん');
     assert.ok(rcm.bodyTop >= rcm.playTop - 1 && rcm.bodyBottom <= rcm.playBottom + 1, `札の本体が再生の枠に収まる: ${JSON.stringify(rcm)}`);
+    // 結果カードが出たら、送信者名・景品名・レア度はカードの中だけ(見出しの送信者名と一覧の最新の1件は隠す)
+    const visibleChips = () => rcPage.$$eval('.event__results .chip', (els) => els.filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.textContent));
+    await rcPage.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    await rcPage.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) < 0.05, null, { timeout: 5000 });
+    assert.deepEqual(await visibleChips(), [], '1回目: カードと同じ結果は一覧に出さない');
+    // 2回目の開封中は見出しに送信者名が戻り、1回目の結果が一覧に出る。2回目のカードでは2回目だけ隠す
+    await rcPage.waitForFunction(() => document.getElementById('ev-count').textContent.includes('2 /'), null, { timeout: 30000 });
+    await rcPage.waitForFunction(() => Number(getComputedStyle(document.getElementById('ev-sender')).opacity) > 0.95, null, { timeout: 5000 });
+    assert.deepEqual(await visibleChips(), ['SR魚を3匹釣るまで他の行動禁止']);
+    await rcPage.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 2, null, { timeout: 30000 });
+    assert.deepEqual(await visibleChips(), ['SR魚を3匹釣るまで他の行動禁止'], '2回目: 1回目の結果だけ一覧に残る');
     await rcPage.close();
     // 枠が1枚でも読めなければ従来の札
     const rcFb = await browser.newPage({ viewport: { width: 540, height: 960 } });
@@ -448,6 +459,11 @@ try {
     await rcFb.waitForSelector('.img-card.sheen', { timeout: 30000 });
     assert.equal(await rcFb.locator('.img-card--framed').count(), 0, '枠が欠けたら従来の札');
     assert.equal(await rcFb.locator('.img-card .img-card__rarity').count(), 1, '従来の札はバッジを HTML で出す');
+    // 従来の札では、見出しの送信者名・結果の一覧はこれまでどおり出す
+    await rcFb.waitForFunction(() => document.querySelectorAll('.event__results .chip').length >= 1, null, { timeout: 30000 });
+    assert.equal(await rcFb.evaluate(() => document.getElementById('event').classList.contains('event--card')), false);
+    assert.ok(Number(await rcFb.evaluate(() => getComputedStyle(document.getElementById('ev-sender')).opacity)) > 0.95, '従来の札: 見出しの送信者名は出す');
+    assert.equal(await rcFb.locator('.event__results .chip--in-card').count(), 0, '従来の札: 一覧は隠さない');
     await rcFb.close();
     console.log('✔ 表示画面(和風): 宝珠の分割開封(上蓋・光球・SSR の昇格・N の控えめな光)・レア度ごとの結果カードと、部品が欠けたときの従来演出');
   }
