@@ -106,7 +106,7 @@ function planLabels(ctx, slices, skin, cssSize, { numberIfTruncated = false } = 
     const tooShort = truncated && (numberIfTruncated || visible < Math.min(MIN_VISIBLE_CHARS, s.label.length));
     if (tooSmall || tooShort) {
       // 番号は細い扇形でも読める大きさ(1080×1920 基準で 22px 以上、画像テーマは 28px 以上)にする
-      const minNum = numberIfTruncated ? 28 : 22;
+      const minNum = numberIfTruncated ? 44 : 22;
       const numSize = Math.min(64, Math.max(minNum / toCss, s.sweep * 260));
       return { mode: 'number', text: String(s.index + 1), fontSize: numSize, drawable: s.sweep >= 0.05 };
     }
@@ -122,7 +122,7 @@ export function unifyPlans(plans, slices, toCss) {
   if (!plans.some((p) => p.mode === 'number')) return plans;
   return plans.map((p, i) => {
     if (p.mode === 'number') return p;
-    const numSize = Math.min(64, Math.max(28 / toCss, slices[i].sweep * 260));
+    const numSize = Math.min(64, Math.max(44 / toCss, slices[i].sweep * 260));
     return { mode: 'number', text: String(slices[i].index + 1), fontSize: numSize, drawable: true };
   });
 }
