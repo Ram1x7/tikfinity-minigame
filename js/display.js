@@ -297,7 +297,7 @@ function showSender(name) {
   hon.textContent = ' さん';
   senderEl.classList.remove('is-2line');
   senderEl.replaceChildren(n, hon);
-  fitText(senderEl, 64, 44, { oneLine: true });
+  fitText(senderEl, theme?.name === 'wafu' ? 52 : 64, theme?.name === 'wafu' ? 30 : 44, { oneLine: true });
   // 1px 未満のはみ出しでも末尾が「…」になるので、文字の実際の幅で判断する
   const textW = n.getBoundingClientRect().width + hon.getBoundingClientRect().width;
   if (textW > senderEl.getBoundingClientRect().width - 0.5) {
@@ -346,7 +346,7 @@ async function playItem(item) {
       // 和風の横長の結果カード: カードが出たら景品名・レア度(と送信者名)はカードの中だけに出す。
       // 景品名が長くてカードに送信者名を入れられなかったときは、見出しの送信者名を残す
       await playRoulette(playEl, rolls[i], pool, {
-        speed, theme, sender: item.sender || '視聴者',
+        speed, theme, size: theme?.name === 'wafu' ? 680 : undefined, sender: item.sender || '視聴者',
         onCard: ({ sender } = {}) => {
           eventEl.classList.add('event--card');
           eventEl.classList.toggle('event--keep-sender', !sender);
