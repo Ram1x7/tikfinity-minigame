@@ -730,3 +730,32 @@
   justify-content: center;
 }
 .theme-wafu .img-result__sub .img-result__sender { max-width: 100%; }
+
+
+/* 2026-10-19: 配信画面向けの視認性調整。
+ * 画像素材・抽選処理はそのまま。大きな背景台紙を省いて、結果の札を主役にする。
+ * 旧レイアウトのように配信画面を隠さず、長文の表示領域を広げる。 */
+.theme-wafu .event {
+  background: transparent;
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+.theme-wafu .event::before,
+.theme-wafu .event::after {
+  display: none;
+}
+/* 結果カードの文字領域を下に広げる。送信者帯(73.5%〜)には重ねない。 */
+.theme-wafu .img-card--framed[data-rarity] .img-card__window {
+  bottom: 31%;
+}
+/* 再生待ち件数は、演出より目立たない大きさにする。 */
+.theme-wafu #pending {
+  font-size: 30px;
+  padding: 6px 22px;
+  border-width: 4px;
+}
+/* 長い結果名を詰め込む場合も、行間を確保する。 */
+.theme-wafu .img-card--framed .img-card__label {
+  line-height: 1.2;
+}
