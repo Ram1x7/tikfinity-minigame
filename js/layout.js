@@ -28,10 +28,10 @@ const THEME_DEFAULTS = {
     panel: true,
   },
   wafu: {
-    gacha: { top: 110, scale: 100 },
-    roulette: { top: 110, scale: 100 },
+    gacha: { top: 240, scale: 70 },
+    roulette: { top: 240, scale: 70 },
     // 実際のコメント欄(6件+入力欄)が上から約1130pxまで来るため、暫定で1100
-    safeBottom: 1100,
+    safeBottom: 0,
     panel: true,
   },
 };
