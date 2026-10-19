@@ -297,7 +297,7 @@ function showSender(name) {
   hon.textContent = ' さん';
   senderEl.classList.remove('is-2line');
   senderEl.replaceChildren(n, hon);
-  fitText(senderEl, 64, 44, { oneLine: true });
+  fitText(senderEl, theme?.name === 'wafu' ? 52 : 64, theme?.name === 'wafu' ? 30 : 44, { oneLine: true });
   // 1px 未満のはみ出しでも末尾が「…」になるので、文字の実際の幅で判断する
   const textW = n.getBoundingClientRect().width + hon.getBoundingClientRect().width;
   if (textW > senderEl.getBoundingClientRect().width - 0.5) {
