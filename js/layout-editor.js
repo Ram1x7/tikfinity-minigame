@@ -80,12 +80,33 @@ export function showStreamUrl(el, env, layout) {
 export const urlValue = (el) => el.dataset.value || el.textContent;
 
 function slider(label, unit, [min, max], step, value, onInput, { disabled = false } = {}) {
-  const out = h('output', {}, `${value}${unit}`);
+  // スライダーと数値入力は常に同期。数値欄は入力確定時に反映するため、
+  // 「300」から「450」へ書き換える途中の値で位置が飛ばない。
   const range = h('input', {
-    type: 'range', min, max, step, value, disabled,
-    oninput: (e) => { out.textContent = `${e.target.value}${unit}`; onInput(Number(e.target.value)); },
+    type: 'range', min, max, step: 1, value, disabled,
+    'aria-label': `${label} (スライダー)`,
   });
-  return h('label', { class: 'slider' }, h('span', { class: 'slider__label' }, label), range, out);
+  const number = h('input', {
+    type: 'number', min, max, step: 1, value, disabled,
+    'aria-label': `${label} (数値入力)`,
+  });
+  const sync = (next) => {
+    const parsed = Number(next);
+    if (!Number.isFinite(parsed)) return false;
+    const clamped = Math.max(min, Math.min(max, Math.round(parsed)));
+    range.value = String(clamped);
+    number.value = String(clamped);
+    onInput(clamped);
+    return true;
+  };
+  range.addEventListener('input', () => sync(range.value));
+  number.addEventListener('change', () => {
+    if (!number.value.trim() || !sync(number.value)) number.value = range.value;
+  });
+  return h('div', { class: 'slider' },
+    h('label', { class: 'slider__label' }, label),
+    range,
+    h('label', { class: 'slider__number' }, number, h('span', {}, unit)));
 }
 
 /**
