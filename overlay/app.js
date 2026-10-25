@@ -1,6 +1,5 @@
 // らみん民 LIVE Overlay: Firebase読み取り専用。既存の再生担当・再生位置には干渉しない。
 import { getEnv } from '../js/env.js';
-import { latestQueueKey, watchQueueAfter, watchConnection } from '../js/store.js';
 import { normalizeOverlayEvent, applyOverlayEvent } from './event-core.js';
 import { jstDate, emptyStats, applyGift } from './gift-stats.js';
 const params = new URLSearchParams(location.search);
@@ -84,6 +83,8 @@ async function start() {
   render();
   $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + ' · 接続中';
   try {
+    // デモ時はFirebase SDKを一切読み込まない。実配信時だけ遅延ロードする。
+    const { latestQueueKey, watchQueueAfter, watchConnection } = await import('../js/store.js');
     // 初回だけ過去のキューを飛ばす。再起動後は保存したカーソル以降を処理する。
     if (state.cursor === null) { state.cursor = await latestQueueKey(env); save(); }
     unsubscribeConnection = watchConnection(ok => {
