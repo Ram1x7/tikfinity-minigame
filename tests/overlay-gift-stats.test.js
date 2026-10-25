@@ -24,3 +24,11 @@ test('dangerous usernames do not pollute prototypes',()=>{
  assert.equal(r.stats.rank.__proto__,1);
  assert.equal(Object.getPrototypeOf(r.stats.rank),null);
 });
+test('saved rank with a hostile username can be restored safely',()=>{
+ const now=Date.parse('2026-10-25T12:00:00Z');
+ const first=applyGift(emptyStats(jstDate(now)),'-A',{sender:'__proto__',receivedAt:now},now).stats;
+ const restored={...first,rank:Object.assign(Object.create(null),JSON.parse(JSON.stringify(first.rank)))};
+ const next=applyGift(restored,'-B',{sender:'__proto__',receivedAt:now},now).stats;
+ assert.equal(next.rank.__proto__,2);
+ assert.equal(Object.getPrototypeOf(next.rank),null);
+});
