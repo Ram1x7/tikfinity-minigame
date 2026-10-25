@@ -2,6 +2,7 @@
 import { getEnv } from '../js/env.js';
 import { latestQueueKey, watchQueueAfter, watchConnection } from '../js/store.js';
 import { normalizeOverlayEvent, applyOverlayEvent } from './event-core.js';
+import { jstDate, emptyStats, applyGift } from './gift-stats.js';
 const params = new URLSearchParams(location.search);
 const demo = params.get('demo') === '1';
 // レイアウト切替はURLのみ。配信中の設定変更でデータは書き換えない。
@@ -14,8 +15,8 @@ if (hide.has('brand')) document.querySelector('.brand').hidden = true;
 const env = getEnv();
 const $ = id => document.getElementById(id);
 const storageKey = 'raminmin-overlay-v2-' + env;
-const dailyKey = (timestamp = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
-const initial = { cursor: null, events: 0, gifts: 0, rank: {}, updatedAt: 0, day: dailyKey() };
+const dailyKey = jstDate;
+const initial = emptyStats();
 let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
 let demoState = { likes: 0, follows: 0, attendance: 0 };
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
@@ -45,24 +46,12 @@ function render() {
   }
 }
 function onGift(key, item) {
-  if (!item || typeof item !== 'object') return;
-  if (key && state.cursor && key <= state.cursor) return;
-  // イベントの受信日時を優先。日付をまたいで停止しても前日分を今日に混ぜない。
-  const receivedAt = Number(item.receivedAt);
-  const eventDay = Number.isFinite(receivedAt) && receivedAt > 0 ? dailyKey(receivedAt) : dailyKey();
-  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; }
-  if (eventDay !== state.day) { if (key) { state.cursor = key; save(); } return; }
-  const sender = String(item.sender || '視聴者').slice(0,40);
-  const name = String(item.giftName || 'ギフト').slice(0,70);
-  const quantity = Math.max(1, Math.min(9999, Math.floor(Number(item.repeatCount) || 1)));
-  state.events += 1; state.gifts += quantity;
-  // 表示名に '__proto__' などが来ても辞書のプロトタイプを汚染しない。
-  if (Object.hasOwn(state.rank, sender)) state.rank[sender] += quantity;
-  else Object.defineProperty(state.rank, sender, { value: quantity, enumerable: true, writable: true, configurable: true });
-  if (key) state.cursor = key;
-  state.updatedAt = Date.now(); save(); render();
-  notify('🎁 ' + sender + ' さん：' + name + (quantity > 1 ? ' ×' + quantity : ''));
+  const result = applyGift(state, key, item);
+  if (result.stats !== state) { state = result.stats; save(); render(); }
+  if (!result.changed) return;
+  notify('🎁 ' + result.sender + ' さん：' + result.name + (result.quantity > 1 ? ' ×' + result.quantity : ''));
 }
+
 function demoInteraction(type, sender, count = 1) {
   const event = normalizeOverlayEvent({ type, sender, count });
   if (!event) return;
@@ -90,7 +79,7 @@ function startDemo() {
 async function start() {
   if (demo) { startDemo(); return; }
   load();
-  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; save(); }
+  if (state.day !== dailyKey()) { state = emptyStats(dailyKey(), state.cursor); save(); }
   render();
   $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + ' · 接続中';
   try {
