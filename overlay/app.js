@@ -6,7 +6,8 @@ const demo = params.get('demo') === '1';
 const env = getEnv();
 const $ = id => document.getElementById(id);
 const storageKey = 'raminmin-overlay-v2-' + env;
-const initial = { cursor: null, events: 0, gifts: 0, rank: {}, updatedAt: 0 };
+const dailyKey = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+const initial = { cursor: null, events: 0, gifts: 0, rank: {}, updatedAt: 0, day: dailyKey() };
 let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
 addEventListener('resize', fit); fit();
@@ -16,7 +17,7 @@ function load() {
     if (parsed && typeof parsed === 'object' && Number.isSafeInteger(parsed.events) && parsed.events >= 0 &&
       Number.isSafeInteger(parsed.gifts) && parsed.gifts >= 0 && parsed.rank && typeof parsed.rank === 'object' &&
       (parsed.cursor === null || typeof parsed.cursor === 'string')) {
-      state = { ...initial, ...parsed, rank: Object.fromEntries(Object.entries(parsed.rank).slice(0, 500)) };
+      state = { ...initial, ...parsed, rank: Object.fromEntries(Object.entries(parsed.rank).filter(([k,v]) => typeof k === 'string' && Number.isFinite(v) && v >= 0).slice(0, 500)) };
     }
   } catch (e) { console.warn('保存済み集計を読めません', e); }
 }
@@ -35,13 +36,17 @@ function render() {
   }
 }
 function onGift(key, item) {
+  // 集計はJST日付ごとに切り替え。キュー位置は維持し、過去イベントの再計上を防ぐ。
+  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; render(); }
   if (!item || typeof item !== 'object') return;
   if (key && state.cursor && key <= state.cursor) return;
   const sender = String(item.sender || '視聴者').slice(0,40);
   const name = String(item.giftName || 'ギフト').slice(0,70);
   const quantity = Math.max(1, Math.min(9999, Math.floor(Number(item.repeatCount) || 1)));
   state.events += 1; state.gifts += quantity;
-  state.rank[sender] = (Number(state.rank[sender]) || 0) + quantity;
+  // 表示名に '__proto__' などが来ても辞書のプロトタイプを汚染しない。
+  if (Object.hasOwn(state.rank, sender)) state.rank[sender] += quantity;
+  else Object.defineProperty(state.rank, sender, { value: quantity, enumerable: true, writable: true, configurable: true });
   if (key) state.cursor = key;
   state.updatedAt = Date.now(); save(); render();
   notify('🎁 ' + sender + ' さん：' + name + (quantity > 1 ? ' ×' + quantity : ''));
@@ -54,7 +59,9 @@ function startDemo() {
 }
 async function start() {
   if (demo) { startDemo(); return; }
-  load(); render();
+  load();
+  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; save(); }
+  render();
   $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + ' · 接続中';
   try {
     // 初回だけ過去のキューを飛ばす。再起動後は保存したカーソル以降を処理する。
