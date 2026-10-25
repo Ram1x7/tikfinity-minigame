@@ -1,20 +1,31 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>らみん民 統合LIVE画面</title><style>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin"><title>らみん民 統合LIVE画面</title>
+<style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 #wrap{position:relative;width:100%;height:100%}
 iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent}
 #mini{z-index:2;pointer-events:none}#game{z-index:1}
 </style></head><body><div id="wrap">
-<iframe id="game" title="ガチャ・ルーレット" allow="autoplay"></iframe>
-<iframe id="mini" title="らみん民オーバーレイ"></iframe>
+<iframe id="game" title="ガチャ・ルーレット" allow="autoplay" referrerpolicy="strict-origin"></iframe>
+<iframe id="mini" title="らみん民オーバーレイ" referrerpolicy="strict-origin"></iframe>
 </div><script>
-const p=new URLSearchParams(location.search);
+const params=new URLSearchParams(location.search);
 const game=new URL('../display.html',location.href);
 const mini=new URL('./display.html',location.href);
-// 元のdisplay.htmlが使う env や表示キーなどのURLパラメータを、そのまま渡す。
-// 秘密情報を外部サイトへ送信せず、同一オリジンのiframeにだけ渡す。
-game.search=p.toString();
-mini.search=p.toString();
+const overlayDemo=params.get('overlayDemo')==='1';
+const gameDemo=params.get('gameDemo');
+const opacity=Number(params.get('overlayOpacity'));
+const overlayParams=new URLSearchParams(params);
+const gameParams=new URLSearchParams(params);
+for(const key of ['overlayDemo','gameDemo','overlayOpacity']){overlayParams.delete(key);gameParams.delete(key)}
+// デモの指定はそれぞれ独立させる。誤って既存ゲームをデモ起動させない。
+overlayParams.delete('demo');gameParams.delete('demo');
+if(overlayDemo)overlayParams.set('demo','1');
+if(['1','gacha','roulette'].includes(gameDemo))gameParams.set('demo',gameDemo);
+game.search=gameParams.toString();mini.search=overlayParams.toString();
+if(Number.isFinite(opacity)&&opacity>=0&&opacity<=1&&params.has('overlayOpacity')){
+ document.getElementById('mini').style.opacity=String(opacity);
+}
 document.getElementById('game').src=game.href;
 document.getElementById('mini').src=mini.href;
 </script></body></html>
