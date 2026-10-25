@@ -44,3 +44,9 @@ PRISM LIVEのWebソースは1080×1920を推奨。背景は透明。
 - 例: `overlay/combined.html?env=prod&layout=minimal&hide=mode`
 
 `layout` と `hide` は統合ページからも引き継がれます。
+
+## イベント処理基盤
+- `event-core.js` に `gift` / `like` / `follow` / `comment` / `attendance` の明示的なイベントモデルを追加。
+- `tests/overlay-event-core.test.js` に正規化・不正値・集計の単体テストを追加。
+- まだTikFinity Webhookには接続していない。正式なイベント形式と重複排除仕様の確認後にWorkerへ接続する。
+- テストファイルは追加済みだが、CI実行結果は未確認。
