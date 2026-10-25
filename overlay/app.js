@@ -1,6 +1,7 @@
 // らみん民 LIVE Overlay: Firebase読み取り専用。既存の再生担当・再生位置には干渉しない。
 import { getEnv } from '../js/env.js';
 import { latestQueueKey, watchQueueAfter, watchConnection } from '../js/store.js';
+import { normalizeOverlayEvent, applyOverlayEvent } from './event-core.js';
 const params = new URLSearchParams(location.search);
 const demo = params.get('demo') === '1';
 // レイアウト切替はURLのみ。配信中の設定変更でデータは書き換えない。
@@ -16,6 +17,7 @@ const storageKey = 'raminmin-overlay-v2-' + env;
 const dailyKey = (timestamp = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
 const initial = { cursor: null, events: 0, gifts: 0, rank: {}, updatedAt: 0, day: dailyKey() };
 let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
+let demoState = { likes: 0, follows: 0, attendance: 0 };
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
 addEventListener('resize', fit); fit();
 function load() {
@@ -61,11 +63,29 @@ function onGift(key, item) {
   state.updatedAt = Date.now(); save(); render();
   notify('🎁 ' + sender + ' さん：' + name + (quantity > 1 ? ' ×' + quantity : ''));
 }
+function demoInteraction(type, sender, count = 1) {
+  const event = normalizeOverlayEvent({ type, sender, count });
+  if (!event) return;
+  demoState = applyOverlayEvent(demoState, event);
+  if (event.type === 'like') {
+    $('pet-status').textContent = 'デモいいね ' + demoState.likes + ' 件';
+    const pet = $('pet-face'); pet.classList.remove('pet-bounce'); void pet.offsetWidth; pet.classList.add('pet-bounce');
+    notify('💜 ' + event.sender + ' さんがいいね ×' + event.count);
+  } else if (event.type === 'attendance') {
+    const marks = $('stamps').children;
+    for (let i = 0; i < marks.length; i++) marks[i].textContent = i < (demoState.attendance % 6) ? '🌸' : '○';
+    notify('🌸 ' + event.sender + ' さんが出席（デモ）');
+  } else if (event.type === 'follow') notify('✨ ' + event.sender + ' さんがフォロー（デモ）');
+  else if (event.type === 'comment') notify('💬 ' + event.sender + ' さんがコメント（デモ）');
+}
 function startDemo() {
   state = { ...initial, rank: {} }; render(); $('mode').textContent = 'DEMO · 実データ未接続';
   const gifts = [{sender:'らみん民A',giftName:'ローズ',repeatCount:3},{sender:'らみん民B',giftName:'ハート',repeatCount:1},{sender:'らみん民A',giftName:'ローズ',repeatCount:2}];
   let index = 0;
-  onGift(null,gifts[index++]); demoTimer = setInterval(() => onGift(null,gifts[index++ % gifts.length]),6000);
+  onGift(null,gifts[index++]);
+  const sequence = [() => demoInteraction('like','らみん民A',5), () => demoInteraction('attendance','らみん民B'), () => demoInteraction('follow','らみん民C'), () => demoInteraction('comment','らみん民A')];
+  let tick = 0;
+  demoTimer = setInterval(() => { if (tick % 2 === 0) onGift(null,gifts[index++ % gifts.length]); else sequence[Math.floor(tick / 2) % sequence.length](); tick++; },6000);
 }
 async function start() {
   if (demo) { startDemo(); return; }
