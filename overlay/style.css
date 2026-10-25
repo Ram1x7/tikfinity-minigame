@@ -10,3 +10,7 @@ body[data-layout="minimal"] .brand{font-size:38px}
 body[data-layout="minimal"] .panel strong{font-size:64px}
 body[data-layout="minimal"] .toast{top:320px;left:56px;right:350px;font-size:28px}
 body[data-layout="compact"] .toast{top:650px;left:56px;right:260px;font-size:30px}
+
+@keyframes pet-bounce{0%,100%{transform:scale(1)}35%{transform:scale(1.2) rotate(-8deg)}70%{transform:scale(.96) rotate(6deg)}}
+.pet-bounce{animation:pet-bounce .65s ease-in-out}
+@media(prefers-reduced-motion:reduce){.pet-bounce{animation:none}}
