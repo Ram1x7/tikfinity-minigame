@@ -27,7 +27,8 @@ function load() {
     if (parsed && typeof parsed === 'object' && Number.isSafeInteger(parsed.events) && parsed.events >= 0 &&
       Number.isSafeInteger(parsed.gifts) && parsed.gifts >= 0 && parsed.rank && typeof parsed.rank === 'object' &&
       (parsed.cursor === null || typeof parsed.cursor === 'string')) {
-      state = { ...initial, ...parsed, rank: Object.fromEntries(Object.entries(parsed.rank).filter(([k,v]) => typeof k === 'string' && Number.isFinite(v) && v >= 0).slice(0, 500)) };
+      const safeRank = Object.assign(Object.create(null), Object.fromEntries(Object.entries(parsed.rank).filter(([k,v]) => typeof k === 'string' && Number.isFinite(v) && v >= 0).slice(0, 500)));
+      state = { ...initial, ...parsed, rank: safeRank };
     }
   } catch (e) { console.warn('保存済み集計を読めません', e); }
 }
@@ -68,7 +69,7 @@ function demoInteraction(type, sender, count = 1) {
   else if (event.type === 'comment') notify('💬 ' + event.sender + ' さんがコメント（デモ）');
 }
 function startDemo() {
-  state = { ...initial, rank: {} }; render(); $('mode').textContent = 'DEMO · 実データ未接続';
+  state = emptyStats(); render(); $('mode').textContent = 'DEMO · 実データ未接続';
   const gifts = [{sender:'らみん民A',giftName:'ローズ',repeatCount:3},{sender:'らみん民B',giftName:'ハート',repeatCount:1},{sender:'らみん民A',giftName:'ローズ',repeatCount:2}];
   let index = 0;
   onGift(null,gifts[index++]);
