@@ -3,6 +3,13 @@ import { getEnv } from '../js/env.js';
 import { latestQueueKey, watchQueueAfter, watchConnection } from '../js/store.js';
 const params = new URLSearchParams(location.search);
 const demo = params.get('demo') === '1';
+// レイアウト切替はURLのみ。配信中の設定変更でデータは書き換えない。
+const layout = params.get('layout') || 'compact';
+if (['compact','full','minimal'].includes(layout)) document.body.dataset.layout = layout;
+else document.body.dataset.layout = 'compact';
+const hide = new Set((params.get('hide') || '').split(',').filter(x => ['counter','pet','ranking','attendance','brand','mode'].includes(x)));
+for (const id of hide) { const el = document.getElementById(id); if (el) el.hidden = true; }
+if (hide.has('brand')) document.querySelector('.brand').hidden = true;
 const env = getEnv();
 const $ = id => document.getElementById(id);
 const storageKey = 'raminmin-overlay-v2-' + env;
