@@ -35,3 +35,12 @@ PRISM LIVEのWebソースは1080×1920を推奨。背景は透明。
 - `overlay/combined.html?env=prod` : 既存ガチャ・ルーレットとオーバーレイを1つのブラウザソースに重ねる（実機未検証）。
 - ガチャ画面に必要な既存の表示用URLパラメータも指定する。キーの共有・公開に注意。
 - 統合ページの技術的な注意点は `README-add.md` を参照。
+
+## PRISM表示の調整
+- `layout=compact` : 初期値。ランキングを上部へ寄せ、出席パネルは隠す
+- `layout=full` : すべてのパネルを表示
+- `layout=minimal` : ギフト数と通知を中心に小さく表示
+- `hide=ranking,pet` : 指定したパネルを隠す。指定可能: `counter,pet,ranking,attendance,brand,mode`
+- 例: `overlay/combined.html?env=prod&layout=minimal&hide=mode`
+
+`layout` と `hide` は統合ページからも引き継がれます。
