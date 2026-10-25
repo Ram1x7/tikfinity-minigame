@@ -6,7 +6,7 @@ const demo = params.get('demo') === '1';
 const env = getEnv();
 const $ = id => document.getElementById(id);
 const storageKey = 'raminmin-overlay-v2-' + env;
-const dailyKey = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+const dailyKey = (timestamp = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
 const initial = { cursor: null, events: 0, gifts: 0, rank: {}, updatedAt: 0, day: dailyKey() };
 let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
@@ -36,10 +36,13 @@ function render() {
   }
 }
 function onGift(key, item) {
-  // 集計はJST日付ごとに切り替え。キュー位置は維持し、過去イベントの再計上を防ぐ。
-  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; render(); }
   if (!item || typeof item !== 'object') return;
   if (key && state.cursor && key <= state.cursor) return;
+  // イベントの受信日時を優先。日付をまたいで停止しても前日分を今日に混ぜない。
+  const receivedAt = Number(item.receivedAt);
+  const eventDay = Number.isFinite(receivedAt) && receivedAt > 0 ? dailyKey(receivedAt) : dailyKey();
+  if (state.day !== dailyKey()) { state = { ...initial, cursor: state.cursor, rank: {} }; }
+  if (eventDay !== state.day) { if (key) { state.cursor = key; save(); } return; }
   const sender = String(item.sender || '視聴者').slice(0,40);
   const name = String(item.giftName || 'ギフト').slice(0,70);
   const quantity = Math.max(1, Math.min(9999, Math.floor(Number(item.repeatCount) || 1)));
