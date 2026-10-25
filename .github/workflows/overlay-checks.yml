@@ -1,0 +1,31 @@
+name: Overlay checks
+on:
+  pull_request:
+    paths:
+      - 'overlay/**'
+      - 'tests/overlay-*.test.js'
+      - '.github/workflows/overlay-checks.yml'
+  push:
+    branches:
+      - feature/raminmin-overlay
+    paths:
+      - 'overlay/**'
+      - 'tests/overlay-*.test.js'
+      - '.github/workflows/overlay-checks.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Overlay unit tests
+        run: node --test tests/overlay-*.test.js
+      - name: JavaScript syntax
+        run: |
+          node --check overlay/app.js
+          node --check overlay/event-core.js
+          node --check overlay/gift-stats.js
