@@ -731,7 +731,7 @@ async function processOverlayEvent(db, envName, fields, receivedAt = Date.now())
   if (VALID_ID.test(id)) {
     dedupePath = 'envs/' + envName + '/overlay/dedupe/' + event.type + '_' + id;
     const { value, etag } = await db.getWithEtag(dedupePath);
-    if (value && receivedAt - Number(value) < ID_TTL_MS) return { status: 'duplicate' };
+    if (value !== null && Number.isFinite(Number(value)) && receivedAt - Number(value) < ID_TTL_MS) return { status: 'duplicate' };
     if (!(await db.putIfMatch(dedupePath, receivedAt, etag))) return { status: 'duplicate' };
   }
   try {
