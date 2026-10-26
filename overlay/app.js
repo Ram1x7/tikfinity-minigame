@@ -37,7 +37,7 @@ function resetForNewDay() {
   save();
   demoState = { likes: 0, follows: 0, attendance: 0 };
   saveEventTotals();
-  $('pet-status').textContent = 'いいね 0 件';
+  $('pet-status').textContent = '0';
   for (const mark of $('stamps').children) mark.textContent = '○';
   render();
 }
@@ -63,7 +63,7 @@ function render() {
   $('gift-count').textContent = String(state.gifts);
   const list = $('ranking'); list.replaceChildren();
   const entries = Object.entries(state.rank).sort((a,b) => b[1] - a[1]).slice(0,5);
-  if (!entries.length) { const li = document.createElement('li'); li.textContent = '受信待ち'; list.append(li); }
+  if (!entries.length) { const li = document.createElement('li'); li.textContent = '—'; list.append(li); }
   for (const [name, count] of entries) {
     const li = document.createElement('li'); li.textContent = name + ' — ' + count + ' 個'; list.append(li);
   }
@@ -72,7 +72,7 @@ function onGift(key, item) {
   const result = applyGift(state, key, item);
   if (result.stats !== state) { state = result.stats; save(); render(); }
   if (!result.changed) return;
-  notify('🎁 ' + result.sender + ' さん：' + result.name + (result.quantity > 1 ? ' ×' + result.quantity : ''));
+  notify('✦ ' + result.sender + ' さん：' + result.name + (result.quantity > 1 ? ' ×' + result.quantity : ''));
 }
 
 function demoInteraction(type, sender, count = 1, isDemo = true) {
@@ -81,15 +81,15 @@ function demoInteraction(type, sender, count = 1, isDemo = true) {
   demoState = applyOverlayEvent(demoState, event);
   if (!isDemo) saveEventTotals();
   if (event.type === 'like') {
-    $('pet-status').textContent = (isDemo ? 'デモいいね ' : 'いいね ') + demoState.likes + ' 件';
+    $('pet-status').textContent = String(demoState.likes);
     const pet = $('pet-face'); pet.classList.remove('pet-bounce'); void pet.offsetWidth; pet.classList.add('pet-bounce');
-    notify('💜 ' + event.sender + ' さんがいいね ×' + event.count);
+    notify('♡ ' + event.sender + ' さん ×' + event.count);
   } else if (event.type === 'attendance') {
     const marks = $('stamps').children;
     for (let i = 0; i < marks.length; i++) marks[i].textContent = i < (demoState.attendance % 6) ? '🌸' : '○';
-    notify('🌸 ' + event.sender + ' さんが出席' + (isDemo ? '（デモ）' : ''));
-  } else if (event.type === 'follow') notify('✨ ' + event.sender + ' さんがフォロー' + (isDemo ? '（デモ）' : ''));
-  else if (event.type === 'comment') notify('💬 ' + event.sender + ' さんがコメント' + (isDemo ? '（デモ）' : ''));
+    notify('✿ ' + event.sender + ' さん' + (isDemo ? '（デモ）' : ''));
+  } else if (event.type === 'follow') notify('✧ ' + event.sender + ' さんがフォロー' + (isDemo ? '（デモ）' : ''));
+  else if (event.type === 'comment') notify('✉ ' + event.sender + ' さんがコメント' + (isDemo ? '（デモ）' : ''));
 }
 function onOverlayEvent(key, raw) {
   if (overlayCursor && key <= overlayCursor) return;
@@ -113,7 +113,7 @@ async function start() {
   if (demo) { startDemo(); return; }
   load();
   demoState = loadEventTotals();
-  $('pet-status').textContent = 'いいね ' + demoState.likes + ' 件';
+  $('pet-status').textContent = String(demoState.likes);
   const marks = $('stamps').children;
   for (let i = 0; i < marks.length; i++) marks[i].textContent = i < (demoState.attendance % 6) ? '🌸' : '○';
   resetForNewDay();
