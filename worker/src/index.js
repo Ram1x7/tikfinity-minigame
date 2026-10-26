@@ -40,6 +40,7 @@ import {
 import { createDb } from './firebase.js';
 import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
 import { handleDisplay, releaseByAdmin } from './display.js';
+import { saveActivity, getActivity } from './activity.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
@@ -304,6 +305,26 @@ export default {
     try {
       const db = createDb(env);
 
+      if (url.pathname === '/overlay/activity') {
+        const envName=url.searchParams.get('env');
+        if(!isEnv(envName))return reply(cors,400,{error:'env required'});
+        if(!envAllowed(env,envName))return reply(cors,403,{error:ENV_DENIED});
+        const body=await request.json().catch(()=>({}));
+        const displayKey=envName==='prod'?env.DISPLAY_KEY_PROD:env.DISPLAY_KEY_TEST;
+        if(!displayKey||!safeEqual(String(body.dk||''),String(displayKey)))return reply(cors,401,{error:'display key invalid'});
+        return reply(cors,200,await getActivity(db,envName));
+      }
+      if (url.pathname === '/overlay/webhook') {
+        if(!safeEqual(url.searchParams.get('k'),env.WEBHOOK_KEY))return reply(cors,401,{error:'webhook key invalid'});
+        const envName=url.searchParams.get('env');
+        if(!isEnv(envName))return reply(cors,400,{error:'env required'});
+        if(!envAllowed(env,envName))return reply(cors,403,{error:ENV_DENIED});
+        const fields=await readFields(request,url);
+        // URL-defined event category takes precedence over untrusted payload category.
+        const type=String(url.searchParams.get('type')||'').toLowerCase();
+        const result=await saveActivity(db,envName,fields,type);
+        return reply(cors,200,result);
+      }
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
           return reply(cors, 401, { error: 'Webhook の合言葉が違います' });
@@ -316,6 +337,7 @@ export default {
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
+        if(result.status==='queued') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
