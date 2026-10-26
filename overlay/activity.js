@@ -51,7 +51,8 @@ function render(data){
  }
 }
 $('viewer').addEventListener('change',()=>{chosen=$('viewer').value;calendar(saved.users.find(x=>x.id===chosen)?.days||[])});
-let timer=0, working=false;
+let timer=0, rotation=0, working=false;
+function rotateCalendar(){const list=(saved.users||[]).filter(u=>(u.days||[]).length);if(list.length<2)return;const i=list.findIndex(u=>u.id===chosen);chosen=list[(i+1)%list.length].id;$('viewer').value=chosen;calendar(list.find(u=>u.id===chosen)?.days||[])}
 async function refresh(){
  if(working)return;working=true;
  try{
@@ -68,6 +69,6 @@ function start(){
   $('status').textContent='DEMO';return;
  }
  if(!dk){$('status').textContent='表示用URLに dk が必要です';calendar();return}
- refresh();timer=setInterval(refresh,4000);
+ refresh();timer=setInterval(refresh,4000);rotation=setInterval(rotateCalendar,12000);
 }
-addEventListener('pagehide',()=>clearInterval(timer));start();
+addEventListener('pagehide',()=>clearInterval(timer);clearInterval(rotation)});start();
