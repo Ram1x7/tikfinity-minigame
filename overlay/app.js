@@ -97,6 +97,7 @@ function onOverlayEvent(key, raw) {
   try { localStorage.setItem(overlayCursorKey, key); } catch (e) { console.warn('イベント位置の保存失敗', e); }
   const event = normalizeOverlayEvent(raw);
   if (!event || event.type === 'gift') return;
+  if (event.timestamp && jstDate(event.timestamp) !== dailyKey()) return;
   demoInteraction(event.type, event.sender, event.count, false);
 }
 function startDemo() {
