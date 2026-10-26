@@ -58,3 +58,10 @@ PRISM LIVEのWebソースは1080×1920を推奨。背景は透明。
 
 ## デモ時の通信
 - `?demo=1` のときはFirebase SDKを読み込まない。接続情報が設定されていなくてもUIのデモを確認できる。
+
+## Worker側の新規イベント受信（未デプロイ）
+- `POST /overlay/webhook?env=prod&k=...` を追加。既存Webhookの鍵を使用し、`type=like|follow|comment|attendance` を受け付ける。
+- `gift` はこの経路では保存せず、既存 `/webhook` に任せる。
+- 保存先は `envs/{env}/overlay/events`。Firebaseルールに読み取り権限のみ追加したが、実DBにはまだ適用していない。
+- TikFinityの実際の送信形式、イベントID・重複排除、保存件数制限、画面側の購読は未対応。受信形式を確認するまでは実運用しない。
+- Webhook URLには秘密の鍵を含むためSNS等に公開しない。
