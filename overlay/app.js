@@ -85,8 +85,10 @@ function startDemo() {
 async function start() {
   if (demo) { startDemo(); return; }
   load();
-  if (state.day !== dailyKey()) { state = emptyStats(dailyKey(), state.cursor); save(); }
+  resetForNewDay();
   render();
+  setInterval(resetForNewDay, 30000);
+  document.addEventListener('visibilitychange', resetForNewDay);
   $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + ' · 接続中';
   try {
     // デモ時はFirebase SDKを一切読み込まない。実配信時だけ遅延ロードする。
