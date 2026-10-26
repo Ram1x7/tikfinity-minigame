@@ -337,7 +337,7 @@ export default {
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
-        if(result.status==='queued') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
+        if(result.status!=='duplicate') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
