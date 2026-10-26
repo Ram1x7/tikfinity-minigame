@@ -38,7 +38,7 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
-import { processOverlayEvent } from './overlay-events.js';
+import { processOverlayEvent, cleanupOverlayEvents } from './overlay-events.js';
 import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
 import { handleDisplay, releaseByAdmin } from './display.js';
 
@@ -312,6 +312,7 @@ export default {
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processOverlayEvent(db, envName, fields);
+        if (result.status === 'queued') ctx.waitUntil(cleanupOverlayEvents(db, envName).catch(() => {}));
         return reply(cors, 200, result);
       }
 
