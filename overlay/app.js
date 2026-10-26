@@ -18,6 +18,12 @@ const dailyKey = jstDate;
 const initial = emptyStats();
 let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
 let demoState = { likes: 0, follows: 0, attendance: 0 };
+function resetForNewDay() {
+  if (demo || state.day === dailyKey()) return;
+  state = emptyStats(dailyKey(), state.cursor);
+  save();
+  render();
+}
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
 addEventListener('resize', fit); fit();
 function load() {
