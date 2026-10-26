@@ -284,6 +284,30 @@ function isDuplicate(existingTs, nowMs, windowMs) {
   return nowMs - existingTs < windowMs;
 }
 
+// ---- overlay/event-core.js ----
+// TikFinity等のイベントを画面表示向けに正規化する純粋関数。
+// Webhookの生データを信頼しない。正式なフィールド仕様が判明したら入力マッピングを拡張する。
+const EVENT_TYPES = Object.freeze(['gift','like','follow','comment','attendance']);
+function normalizeOverlayEvent(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const type = String(raw.type || '').trim().toLowerCase();
+  if (!EVENT_TYPES.includes(type)) return null;
+  const sender = String(raw.sender || raw.nickname || '視聴者').slice(0,40);
+  const name = String(raw.name || raw.giftName || '').slice(0,70);
+  const amount = Number(raw.count ?? raw.repeatCount ?? 1);
+  const count = Number.isFinite(amount) ? Math.max(1, Math.min(9999, Math.floor(amount))) : 1;
+  const timestamp = Number(raw.timestamp ?? raw.receivedAt);
+  return { type, sender, name, count, timestamp: Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null };
+}
+function applyOverlayEvent(state, event) {
+  if (!event || !EVENT_TYPES.includes(event.type)) return state;
+  const next = { ...state, likes: Number(state.likes)||0, follows:Number(state.follows)||0, attendance:Number(state.attendance)||0 };
+  if (event.type === 'like') next.likes += event.count;
+  if (event.type === 'follow') next.follows += 1;
+  if (event.type === 'attendance') next.attendance += 1;
+  return next;
+}
+
 // ---- worker/src/firebase.js ----
 // ============================================================
 // worker/src/firebase.js
@@ -691,6 +715,51 @@ function releaseByAdmin(db, envName) {
     : { result: { ok: true, released: false } }));
 }
 
+// ---- worker/src/overlay-events.js ----
+const MAX_EVENTS = 300;
+const ID_TTL_MS = 24 * 60 * 60 * 1000;
+const VALID_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+
+// Events are separate from the existing gift lottery queue.
+async function processOverlayEvent(db, envName, fields, receivedAt = Date.now()) {
+  const event = normalizeOverlayEvent(fields);
+  if (!event || event.type === 'gift') return { status: 'skipped' };
+  // Public Firebase readers must not receive TikTok usernames or raw comments.
+  // Identity-free notifications are safer until authenticated Firebase reads exist.
+  const id = String(fields.eventId || fields.msgId || '').trim();
+  let dedupePath = null;
+  if (VALID_ID.test(id)) {
+    dedupePath = 'envs/' + envName + '/overlay/dedupe/' + event.type + '_' + id;
+    const { value, etag } = await db.getWithEtag(dedupePath);
+    if (value && receivedAt - Number(value) < ID_TTL_MS) return { status: 'duplicate' };
+    if (!(await db.putIfMatch(dedupePath, receivedAt, etag))) return { status: 'duplicate' };
+  }
+  try {
+    const payload = { type: event.type, count: event.count, timestamp: receivedAt };
+    const result = await db.post('envs/' + envName + '/overlay/events', payload);
+    return { status: 'queued', key: result.name, type: event.type };
+  } catch (error) {
+    if (dedupePath) await db.remove(dedupePath).catch(() => {});
+    throw error;
+  }
+}
+
+async function cleanupOverlayEvents(db, envName, now = Date.now()) {
+  const base = 'envs/' + envName + '/overlay';
+  const trim = async (path, keep) => {
+    const keys = Object.keys((await db.get(path, { shallow: 'true' })) || {}).sort();
+    if (keys.length <= keep) return;
+    const patch = {};
+    for (const key of keys.slice(0, keys.length - keep)) patch[key] = null;
+    await db.patch(path, patch);
+  };
+  await trim(base + '/events', MAX_EVENTS);
+  const ids = (await db.get(base + '/dedupe')) || {};
+  const expired = {};
+  for (const [id, at] of Object.entries(ids)) if (now - Number(at) > ID_TTL_MS) expired[id] = null;
+  if (Object.keys(expired).length) await db.patch(base + '/dedupe', expired);
+}
+
 // ---- worker/src/index.js ----
 // ============================================================
 // worker/src/index.js  (Cloudflare Worker)
@@ -721,6 +790,7 @@ function releaseByAdmin(db, envName) {
 //   ALLOWED_ENVS      (任意) この Worker で使える環境。テスト専用の Worker では "test" にする。
 //                     一覧に無い環境(env=prod など)への要求は、Webhook・管理・表示のすべてで 403 にする
 // ============================================================
+
 
 
 
@@ -988,6 +1058,17 @@ export default {
 
     try {
       const db = createDb(env);
+
+      if (url.pathname === '/overlay/webhook') {
+        if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) return reply(cors, 401, { error: 'unauthorized' });
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'invalid env' });
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+        const fields = await readFields(request, url);
+        const result = await processOverlayEvent(db, envName, fields);
+        if (result.status === 'queued') ctx.waitUntil(cleanupOverlayEvents(db, envName).catch(() => {}));
+        return reply(cors, 200, result);
+      }
 
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
