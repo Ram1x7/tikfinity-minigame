@@ -718,6 +718,9 @@ async function saveActivity(db,envName,fields,forcedType='',now=Date.now()){
  if(type==='comment')event.message=rawMessage;
  if(type==='gift')event.gift=rawGift||'ギフト';
  await db.post(base+'/recent',event);
+ // Keep a bounded activity feed; avoid storing comments indefinitely.
+ const recentKeys=Object.keys(await db.get(base+'/recent',{shallow:'true'})||{}).sort();
+ if(recentKeys.length>150)await db.patch(base+'/recent',Object.fromEntries(recentKeys.slice(0,recentKeys.length-150).map(key=>[key,null])));
  if(uid && (type==='attendance'||type==='like')){
   const path=base+'/users/'+uid;
   for(let attempt=0;attempt<6;attempt++){
@@ -1072,7 +1075,7 @@ export default {
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
         const result = await processGift(db, envName, fields, 'webhook');
-        if(result.status==='queued') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
+        if(result.status!=='duplicate') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
         // TikFinity に再送させないよう、処理しなかった場合も 200 を返す
         return reply(cors, 200, result);
