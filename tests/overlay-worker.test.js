@@ -21,6 +21,8 @@ test('like event is written outside the lottery queue', async () => {
   assert.equal(result.status,'queued');
   assert.equal(db.posts[0].path,'envs/prod/overlay/events');
   assert.equal(db.posts[0].payload.count,3);
+  assert.equal('sender' in db.posts[0].payload,false);
+  assert.equal('name' in db.posts[0].payload,false);
 });
 test('same eventId is not posted twice', async () => {
   const db=fakeDb();
@@ -36,4 +38,15 @@ test('gift is ignored by the overlay event webhook', async () => {
 });
 test('cleanup can run against an empty event feed', async () => {
   await cleanupOverlayEvents(fakeDb(),'prod',1000);
+});
+
+test('event types with same ID do not collide', async () => {
+  const db=fakeDb();
+  assert.equal((await processOverlayEvent(db,'prod',{type:'like',eventId:'same'},1000)).status,'queued');
+  assert.equal((await processOverlayEvent(db,'prod',{type:'follow',eventId:'same'},1000)).status,'queued');
+});
+test('viewer names and comments are not stored in public feed', async () => {
+  const db=fakeDb();
+  await processOverlayEvent(db,'prod',{type:'comment',sender:'private user',name:'sensitive comment',eventId:'comment-1'},1000);
+  assert.deepEqual(Object.keys(db.posts[0].payload).sort(),['count','timestamp','type']);
 });
