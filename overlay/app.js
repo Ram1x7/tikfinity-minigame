@@ -19,11 +19,26 @@ const initial = emptyStats();
 let state = { ...initial }, unsubscribeQueue, unsubscribeOverlay, unsubscribeConnection, toastTimer, demoTimer;
 const overlayCursorKey = 'raminmin-overlay-event-cursor-' + env;
 let overlayCursor = null;
+const overlayDailyKey = 'raminmin-overlay-event-totals-' + env;
+function loadEventTotals() {
+  try { const saved = JSON.parse(localStorage.getItem(overlayDailyKey) || 'null');
+    if (saved && saved.day === dailyKey()) return {likes:Number(saved.likes)||0,follows:Number(saved.follows)||0,attendance:Number(saved.attendance)||0};
+  } catch {}
+  return {likes:0,follows:0,attendance:0};
+}
+function saveEventTotals() {
+  if (demo) return;
+  try { localStorage.setItem(overlayDailyKey, JSON.stringify({...demoState,day:dailyKey()})); } catch {}
+}
 let demoState = { likes: 0, follows: 0, attendance: 0 };
 function resetForNewDay() {
   if (demo || state.day === dailyKey()) return;
   state = emptyStats(dailyKey(), state.cursor);
   save();
+  demoState = { likes: 0, follows: 0, attendance: 0 };
+  saveEventTotals();
+  $('pet-status').textContent = 'いいね 0 件';
+  for (const mark of $('stamps').children) mark.textContent = '○';
   render();
 }
 function fit() { $('stage').style.transform = 'scale(' + Math.min(innerWidth / 1080, innerHeight / 1920) + ')'; }
@@ -64,6 +79,7 @@ function demoInteraction(type, sender, count = 1, isDemo = true) {
   const event = normalizeOverlayEvent({ type, sender, count });
   if (!event) return;
   demoState = applyOverlayEvent(demoState, event);
+  if (!isDemo) saveEventTotals();
   if (event.type === 'like') {
     $('pet-status').textContent = (isDemo ? 'デモいいね ' : 'いいね ') + demoState.likes + ' 件';
     const pet = $('pet-face'); pet.classList.remove('pet-bounce'); void pet.offsetWidth; pet.classList.add('pet-bounce');
@@ -95,6 +111,10 @@ function startDemo() {
 async function start() {
   if (demo) { startDemo(); return; }
   load();
+  demoState = loadEventTotals();
+  $('pet-status').textContent = 'いいね ' + demoState.likes + ' 件';
+  const marks = $('stamps').children;
+  for (let i = 0; i < marks.length; i++) marks[i].textContent = i < (demoState.attendance % 6) ? '🌸' : '○';
   resetForNewDay();
   render();
   setInterval(resetForNewDay, 30000);
