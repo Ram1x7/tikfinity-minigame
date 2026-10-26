@@ -14,14 +14,15 @@ test('従来デザインの初期値は以前の表示と同じ(上端300・100%
 
 test('テーマごとに初期値が独立している', () => {
   const wafu = parseLayout(new URLSearchParams('theme=wafu'));
-  assert.deepEqual(wafu.gacha, { top: 110, scale: 100 });
-  assert.equal(wafu.safeBottom, 1100, '和風のコメント欄よけは暫定 1100');
+  assert.deepEqual(wafu.gacha, { top: 240, scale: 70 });
+  assert.deepEqual(wafu.roulette, { top: 240, scale: 70 });
+  assert.equal(wafu.safeBottom, 0, '和風の現在の初期値はコメント欄よけなし');
   assert.equal(wafu.panel, true);
   // 和風の初期値を変えても従来の初期値は変わらない
   const w = defaultLayout('wafu');
   w.gacha.top = 999;
   assert.equal(defaultLayout('').gacha.top, 300);
-  assert.equal(defaultLayout('wafu').gacha.top, 110);
+  assert.equal(defaultLayout('wafu').gacha.top, 240);
 });
 
 test('parseLayout: ガチャ・ルーレット別の位置・大きさ、範囲外は丸める', () => {

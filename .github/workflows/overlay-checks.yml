@@ -1,0 +1,42 @@
+name: Overlay checks
+on:
+  pull_request:
+    paths:
+      - 'overlay/**'
+      - 'tests/overlay-*.test.js'
+      - 'worker/src/**'
+      - 'worker/dist/worker.js'
+      - 'scripts/build-worker.mjs'
+      - '.github/workflows/overlay-checks.yml'
+  push:
+    branches:
+      - feature/raminmin-overlay
+    paths:
+      - 'overlay/**'
+      - 'tests/overlay-*.test.js'
+      - 'worker/src/**'
+      - 'worker/dist/worker.js'
+      - 'scripts/build-worker.mjs'
+      - '.github/workflows/overlay-checks.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Overlay unit tests
+        run: node --test tests/overlay-*.test.js
+      - name: Verify standalone Worker build
+        run: npm run check
+      - name: JavaScript syntax
+        run: |
+          node --check overlay/app.js
+          node --check overlay/event-core.js
+          node --check overlay/gift-stats.js
+          node --check worker/src/overlay-events.js
+          node --check worker/src/index.js
+          node --check worker/dist/worker.js
