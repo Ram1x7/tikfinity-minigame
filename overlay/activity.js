@@ -71,4 +71,4 @@ function start(){
  if(!dk){$('status').textContent='表示用URLに dk が必要です';calendar();return}
  refresh();timer=setInterval(refresh,4000);rotation=setInterval(rotateCalendar,12000);
 }
-addEventListener('pagehide',()=>clearInterval(timer);clearInterval(rotation)});start();
+addEventListener('pagehide',()=>{clearInterval(timer);clearInterval(rotation)});start();
