@@ -311,7 +311,9 @@ export default {
         if (!isEnv(envName)) return reply(cors, 400, { error: 'invalid env' });
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
-        const result = await processOverlayEvent(db, envName, fields);
+        // Event type is selected by the trusted action URL, not by TikFinity's payload.
+        const type = url.searchParams.get('type');
+        const result = await processOverlayEvent(db, envName, { ...fields, type });
         if (result.status === 'queued') ctx.waitUntil(cleanupOverlayEvents(db, envName).catch(() => {}));
         return reply(cors, 200, result);
       }
