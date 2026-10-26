@@ -4,6 +4,9 @@ on:
     paths:
       - 'overlay/**'
       - 'tests/overlay-*.test.js'
+      - 'worker/src/**'
+      - 'worker/dist/worker.js'
+      - 'scripts/build-worker.mjs'
       - '.github/workflows/overlay-checks.yml'
   push:
     branches:
@@ -24,6 +27,8 @@ jobs:
           node-version: '22'
       - name: Overlay unit tests
         run: node --test tests/overlay-*.test.js
+      - name: Verify standalone Worker build
+        run: npm run check
       - name: JavaScript syntax
         run: |
           node --check overlay/app.js
