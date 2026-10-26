@@ -25,7 +25,7 @@ const PRODUCTION = {
   },
   // Cloudflare Worker の URL(例: https://tikfinity-minigame.xxxx.workers.dev)
   // ここに書いておくと、管理画面・テスト画面で毎回入力しなくて済みます(管理画面の「接続設定」で端末ごとに上書きも可)
-  workerUrl: '',
+  workerUrl: 'https://tikfinity-minigame.saiyowao517.workers.dev',
 };
 
 // テスト専用(プレビュー)。テスト専用 Firebase プロジェクトとテスト専用 Worker の値を入れる

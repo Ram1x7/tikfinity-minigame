@@ -92,3 +92,16 @@ export function watchRecentLog(env, count, onChange) {
 export function watchDisplayState(env, onChange) {
   return onValue(envRef(env, 'state/display'), (snap) => onChange(snap.val() || {}));
 }
+
+/** Overlay events: read-only subscription, isolated from lottery queue. */
+export async function latestOverlayEventKey(env) {
+  const snap = await get(query(envRef(env, 'overlay/events'), limitToLast(1)));
+  let key = null;
+  snap.forEach(child => { key = child.key; });
+  return key;
+}
+export function watchOverlayEventsAfter(env, cursor, onItem) {
+  const base = envRef(env, 'overlay/events');
+  const q = cursor ? query(base, orderByKey(), startAfter(cursor)) : query(base, orderByKey());
+  return onChildAdded(q, snap => onItem(snap.key, snap.val()));
+}

@@ -1,16 +1,43 @@
-:root{color-scheme:dark;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:#f6f1ff}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}#stage{position:relative;width:1080px;height:1920px;transform-origin:top left;background:transparent;padding:60px 56px}.brand{text-align:center;font-size:52px;font-weight:900;letter-spacing:5px;text-shadow:0 4px 18px #7d38c9}.top{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:42px}.panel{border:2px solid #70e7ed99;border-radius:32px;background:linear-gradient(140deg,#24153ddd,#132f49dd);box-shadow:0 14px 40px #0006,inset 0 0 30px #a460f022;padding:28px}.panel small,.panel span{display:block;color:#c9d8e6;font-size:23px}.panel strong{display:block;text-align:center;font-size:100px;color:#b9fbff;margin:10px}.pet-face{text-align:center;font-size:62px;color:#d5a9ff;margin:16px 0}.ranking{margin-top:30px;min-height:390px}h2{font-size:34px;margin:0 0 20px}.ranking ol{padding-left:42px;font-size:28px;line-height:1.8}.ranking li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attendance{margin-top:30px}.stamps{display:flex;gap:15px;margin:24px 0}.stamps span{display:grid;place-items:center;width:72px;height:72px;border:2px dashed #ad92d7;border-radius:50%;font-size:40px}.toast{position:absolute;left:56px;right:56px;top:1140px;min-height:100px;opacity:0;transform:translateY(25px);transition:opacity .35s,transform .35s;padding:28px;text-align:center;border:2px solid #76f2fa;border-radius:24px;background:#24103eeb;font-size:38px;font-weight:800;overflow-wrap:anywhere}.toast.show{opacity:1;transform:translateY(0)}.mode{position:absolute;left:56px;bottom:70px;font-size:22px;color:#f5d9ff;text-shadow:0 2px 8px #000}@media(prefers-reduced-motion:reduce){.toast{transition:none}}
-/* PRISM用: 抽選演出を邪魔しない上部寄せレイアウトを初期値にする */
+/* らみん民オリジナル・和の縁日。汎用ダッシュボードのカードUIを廃止 */
+:root{color-scheme:dark;font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;color:#f9f3e8;--sumi:#111422;--murasaki:#7256a7;--mizu:#8de3e5;--kin:#d8bb79}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+#stage{position:relative;width:1080px;height:1920px;transform-origin:top left;background:transparent;padding:42px 46px}
 [hidden]{display:none!important}
-body[data-layout="compact"] .ranking{max-width:660px;min-height:0;margin-top:24px}
-body[data-layout="compact"] .ranking ol{font-size:24px;line-height:1.5}
+.brand{position:relative;display:flex;align-items:center;gap:18px;width:570px;min-height:140px;padding:16px 32px 16px 18px;background:linear-gradient(112deg,#171326f2,#30244bdd 72%,#162b39e9);border:1px solid #d8bb7977;border-left:7px solid var(--mizu);clip-path:polygon(0 0,97% 0,100% 18%,100% 100%,3% 100%,0 85%);box-shadow:0 12px 32px #0008}
+.brand:before{content:"";position:absolute;inset:8px;border:1px solid #d8bb7933;pointer-events:none}
+.brand__crest{display:grid;place-items:center;flex:none;width:92px;height:92px;border:3px double var(--kin);border-radius:50%;font-size:52px;font-weight:900;color:#fff3d8;background:radial-gradient(circle,#6b4b99,#28203f)}
+.brand__copy{display:flex;flex-direction:column;gap:2px;line-height:1.12}
+.brand__eyebrow{font-size:18px;letter-spacing:8px;color:var(--mizu)}
+.brand__copy strong{font-size:49px;letter-spacing:7px;text-shadow:0 3px 10px #000}
+.brand__subtitle{font-size:16px;letter-spacing:5px;color:var(--kin)}
+.brand__seal{position:absolute;right:27px;bottom:20px;padding:5px 9px;border:1px solid #e8d2a3;border-radius:2px;font-size:22px;color:#f2dfb9;transform:rotate(-9deg)}
+.top{display:flex;align-items:stretch;gap:14px;margin-top:22px;width:650px}
+.panel{position:relative;background:linear-gradient(145deg,#161525ed,#24213ddc 70%,#122b35dc);border:1px solid #c3aa777a;border-radius:3px;box-shadow:0 9px 25px #0007;padding:17px 22px;overflow:hidden}
+.panel:before{content:"";position:absolute;top:7px;bottom:7px;left:7px;width:2px;background:linear-gradient(var(--kin),transparent,var(--mizu));opacity:.85}
+.panel small{display:block;font-size:21px;letter-spacing:3px;color:#f6e4bd}
+.panel small em{font:normal 13px sans-serif;letter-spacing:2px;color:var(--mizu)}
+.panel span{display:block;color:#d7d5dd;font-size:16px;letter-spacing:1px}
+.top .panel{flex:1;min-height:154px}
+.panel strong{display:block;text-align:center;font-family:Georgia,serif;font-size:67px;line-height:1.12;color:#a7ebec;font-weight:500;margin:5px 0}
+.pet-face{text-align:center;font-size:47px;line-height:1.2;color:var(--kin);margin:8px 0}
+.ranking{margin-top:18px;width:650px;min-height:0}
+h2{margin:0 0 14px;font-size:27px;font-weight:600;letter-spacing:5px;color:#f5e4bc}
+h2 span{display:inline;font:normal 15px sans-serif;letter-spacing:2px;color:#91dce2}
+.ranking ol{padding-left:36px;margin:0;font-size:22px;line-height:1.7}
+.ranking li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-bottom:1px solid #d8bb792b}
+.attendance{margin-top:18px;width:650px}
+.stamps{display:flex;gap:14px;margin:18px 0}
+.stamps span{display:grid;place-items:center;width:68px;height:68px;border:1px solid #d8bb79;border-radius:50%;font-size:34px;background:#2d2240a6}
+.toast{position:absolute;top:640px;left:46px;width:680px;min-height:100px;padding:23px 30px 23px 48px;background:linear-gradient(100deg,#171423f4,#37234be8,#17313bee);border-left:7px solid var(--mizu);border-top:1px solid #d8bb7988;border-bottom:1px solid #d8bb7988;border-right:1px solid #d8bb7988;border-radius:2px;box-shadow:0 10px 30px #0008;font-size:29px;font-weight:700;letter-spacing:1px;overflow-wrap:anywhere;opacity:0;transform:translateX(-18px);transition:opacity .35s,transform .35s}
+.toast:before{content:"✦";position:absolute;left:15px;top:25px;color:var(--kin);font-size:23px}
+.toast.show{opacity:1;transform:translateX(0)}
+.mode{position:absolute;left:46px;bottom:44px;font:16px sans-serif;color:#c3b5cf;text-shadow:0 2px 8px #000}
 body[data-layout="compact"] .attendance{display:none}
+body[data-layout="compact"] .ranking{width:650px}
 body[data-layout="minimal"] .ranking,body[data-layout="minimal"] .attendance,body[data-layout="minimal"] #pet{display:none}
-body[data-layout="minimal"] .top{display:block;width:400px}
-body[data-layout="minimal"] .brand{font-size:38px}
-body[data-layout="minimal"] .panel strong{font-size:64px}
-body[data-layout="minimal"] .toast{top:320px;left:56px;right:350px;font-size:28px}
-body[data-layout="compact"] .toast{top:650px;left:56px;right:260px;font-size:30px}
-
-@keyframes pet-bounce{0%,100%{transform:scale(1)}35%{transform:scale(1.2) rotate(-8deg)}70%{transform:scale(.96) rotate(6deg)}}
-.pet-bounce{animation:pet-bounce .65s ease-in-out}
-@media(prefers-reduced-motion:reduce){.pet-bounce{animation:none}}
+body[data-layout="minimal"] .top{width:320px}
+body[data-layout="minimal"] .brand{width:520px}
+body[data-layout="minimal"] .toast{top:355px}
+@keyframes bell-ring{0%,100%{transform:rotate(0)}30%{transform:rotate(-14deg)}65%{transform:rotate(12deg)}}
+.pet-bounce{animation:bell-ring .65s ease-in-out}
+@media(prefers-reduced-motion:reduce){.pet-bounce,.toast{animation:none;transition:none}}
