@@ -1,30 +1,21 @@
-/* らみん民：透明な配信画面の上に置く小さな和モダンHUD */
-:root{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:#f7f3ff;--purple:#a88ad8;--aqua:#8de4e7;--gold:#d6c49c}
+:root{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:#f8f6ff;--cyan:#8de4e7;--gold:#d7c59c}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
-#stage{position:relative;width:1080px;height:1920px;transform-origin:top left;background:transparent;padding:35px 40px}
-[hidden]{display:none!important}
-.brand{display:flex;align-items:center;gap:13px;width:max-content;min-width:250px;height:73px;padding:9px 22px 9px 10px;background:linear-gradient(95deg,#201b36ed,#191d2ddc 80%,#112b37c9);border:1px solid #d6c49c55;border-left:3px solid var(--aqua);clip-path:polygon(0 0,96% 0,100% 50%,96% 100%,0 100%);box-shadow:0 5px 20px #0006}
-.brand__crest{display:grid;place-items:center;width:51px;height:51px;border:2px double var(--gold);border-radius:50%;font-family:"Yu Mincho",serif;font-size:30px;color:#fff1dc;background:#3b2b56}
-.brand__copy strong{font-size:29px;letter-spacing:3px;font-weight:800;text-shadow:0 2px 6px #000}
-.top{display:flex;gap:9px;margin-top:10px;width:max-content}
-.panel{display:flex;align-items:center;justify-content:center;gap:11px;height:58px;min-width:120px;padding:7px 16px;background:linear-gradient(110deg,#171626db,#302340d9);border:1px solid #d6c49c55;border-radius:3px;box-shadow:0 4px 15px #0006}
-.symbol{font-size:25px;color:var(--gold)}
-.panel strong{font:500 30px Georgia,serif;color:var(--aqua)}
-.pet-face{font-size:34px;color:var(--purple);line-height:1}
-#pet-status{font-size:20px;color:#f5ecff}
-.ranking{width:350px;margin-top:10px;padding:8px 16px;background:linear-gradient(100deg,#1c1728d8,#1b2434bf);border-left:2px solid var(--gold);border-top:1px solid #d6c49c3b}
-.ranking ol{margin:0;padding-left:26px;font-size:17px;line-height:1.6}
-.ranking li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.attendance{width:max-content;margin-top:9px}
-.stamps{display:flex;gap:6px}
-.stamps span{display:grid;place-items:center;width:36px;height:36px;border:1px solid #d6c49c88;border-radius:50%;background:#272039cc;font-size:19px}
-.toast{position:absolute;top:480px;left:40px;width:580px;min-height:80px;padding:20px 25px 20px 44px;background:linear-gradient(100deg,#201a35f0,#322044e8,#17303de8);border:1px solid #d6c49c88;border-left:4px solid var(--aqua);clip-path:polygon(0 0,98% 0,100% 22%,100% 100%,0 100%);box-shadow:0 7px 24px #0007;font-size:25px;font-weight:700;overflow-wrap:anywhere;opacity:0;transform:translateX(-15px);transition:opacity .3s,transform .3s}
-.toast:before{content:"✧";position:absolute;left:15px;top:20px;color:var(--gold)}
-.toast.show{opacity:1;transform:translateX(0)}
-.mode{position:absolute;left:40px;bottom:35px;font-size:15px;color:#c9bbdc;text-shadow:0 2px 6px #000}
-body[data-layout="compact"] .attendance{display:none}
-body[data-layout="minimal"] .ranking,body[data-layout="minimal"] .attendance,body[data-layout="minimal"] #pet{display:none}
-body[data-layout="minimal"] .toast{top:250px}
-@keyframes heartbeat{0%,100%{transform:scale(1)}40%{transform:scale(1.24)}}
-.pet-bounce{animation:heartbeat .65s ease-in-out}
-@media(prefers-reduced-motion:reduce){.pet-bounce,.toast{animation:none;transition:none}}
+#stage{position:relative;width:1080px;height:1920px;transform-origin:top left;background:transparent;padding:30px;display:flex;align-items:flex-start;flex-direction:column;gap:12px}
+section{width:410px;padding:13px 16px;background:linear-gradient(110deg,#1d1931e8,#172633dc);border:1px solid #c2b6dd5e;border-left:3px solid var(--cyan);box-shadow:0 8px 22px #0007;border-radius:8px}
+.panel-head{display:flex;gap:12px;align-items:center;justify-content:space-between;color:var(--cyan);font-size:25px;margin-bottom:9px}
+.panel-head small{font-size:15px;color:#c1b0db}
+select{width:100%;padding:7px 10px;margin-bottom:10px;color:#fff;background:#2b2746;border:1px solid #afa0c585;border-radius:5px;font-size:16px}
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calendar span{display:grid;place-items:center;height:36px;border-radius:5px;background:#1c2432a3;font-size:14px}
+.calendar span.active{background:#7256a7;border:1px solid var(--cyan);color:#fff}
+.calendar span.muted{background:transparent;color:#8f879d}
+ol{margin:0;padding-left:28px;font-size:20px;line-height:1.7}
+li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed{display:flex;flex-direction:column;gap:6px;max-height:285px;overflow:hidden}
+.item{display:flex;gap:9px;padding:7px 3px;border-bottom:1px solid #eee2ff23;font-size:17px;overflow-wrap:anywhere}
+.item strong{color:#bfeef4;font-weight:700}
+.item .detail{flex:1;min-width:0}
+.item .date{color:#bbb2c8;font-size:12px}
+.status{font-size:12px;opacity:.65;text-shadow:0 2px 4px #000}
+body[data-layout="compact"] .calendar-panel{display:none}
+body[data-layout="minimal"] .calendar-panel,body[data-layout="minimal"] .likes-panel{display:none}

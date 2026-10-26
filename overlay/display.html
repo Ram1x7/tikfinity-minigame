@@ -1,12 +1,9 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin"><title>らみん民 LIVE Overlay</title><link rel="stylesheet" href="./style.css"></head>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin"><title>LIVE activity overlay</title><link rel="stylesheet" href="./style.css"></head>
 <body><main id="stage">
-<header class="brand" aria-label="らみん民"><span class="brand__crest" aria-hidden="true">ら</span><div class="brand__copy"><strong>らみん民</strong></div></header>
-<section class="top">
-<article class="panel" id="counter" aria-label="ギフト累計"><span class="symbol" aria-hidden="true">✦</span><strong id="gift-count">0</strong></article>
-<article class="panel" id="pet" aria-label="いいね累計"><div class="pet-face" id="pet-face" aria-hidden="true">♡</div><span id="pet-status">いいね 0 件</span></article>
-</section>
-<section class="ranking" aria-label="ギフトランキング"><ol id="ranking"><li>—</li></ol></section>
-<section class="attendance" aria-label="出席"><div class="stamps" id="stamps"><span>○</span><span>○</span><span>○</span><span>○</span><span>○</span></div></section>
-<div class="toast" id="toast" aria-live="polite"></div><div class="mode" id="mode">接続準備中</div>
-</main><script type="module" src="./app.js"></script></body></html>
+<section class="calendar-panel"><div class="panel-head"><span>▦</span><span id="month"></span></div><select id="viewer" aria-label="カレンダー表示ユーザー"><option value="">入室履歴なし</option></select><div id="calendar" class="calendar"></div></section>
+<section class="likes-panel"><div class="panel-head">♡ <small>TOP 5</small></div><ol id="likes-ranking"><li>—</li></ol></section>
+<section class="gift-panel"><div class="panel-head">✧</div><div id="gift-feed" class="feed"></div></section>
+<section class="comment-panel"><div class="panel-head">☷</div><div id="comment-feed" class="feed"></div></section>
+<div id="status" class="status">接続待機中</div>
+</main><script type="module" src="./activity.js"></script></body></html>

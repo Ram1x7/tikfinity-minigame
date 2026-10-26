@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sources = ['shared/core.js', 'worker/src/firebase.js', 'worker/src/http.js', 'worker/src/display.js', 'worker/src/index.js'];
+const sources = ['shared/core.js', 'worker/src/firebase.js', 'worker/src/http.js', 'worker/src/display.js', 'worker/src/activity.js', 'worker/src/index.js'];
 const outPath = join(root, 'worker/dist/worker.js');
 
 function strip(code) {
