@@ -16,7 +16,9 @@ const $ = id => document.getElementById(id);
 const storageKey = 'raminmin-overlay-v2-' + env;
 const dailyKey = jstDate;
 const initial = emptyStats();
-let state = { ...initial }, unsubscribeQueue, unsubscribeConnection, toastTimer, demoTimer;
+let state = { ...initial }, unsubscribeQueue, unsubscribeOverlay, unsubscribeConnection, toastTimer, demoTimer;
+const overlayCursorKey = 'raminmin-overlay-event-cursor-' + env;
+let overlayCursor = null;
 let demoState = { likes: 0, follows: 0, attendance: 0 };
 function resetForNewDay() {
   if (demo || state.day === dailyKey()) return;
@@ -58,20 +60,28 @@ function onGift(key, item) {
   notify('🎁 ' + result.sender + ' さん：' + result.name + (result.quantity > 1 ? ' ×' + result.quantity : ''));
 }
 
-function demoInteraction(type, sender, count = 1) {
+function demoInteraction(type, sender, count = 1, isDemo = true) {
   const event = normalizeOverlayEvent({ type, sender, count });
   if (!event) return;
   demoState = applyOverlayEvent(demoState, event);
   if (event.type === 'like') {
-    $('pet-status').textContent = 'デモいいね ' + demoState.likes + ' 件';
+    $('pet-status').textContent = (isDemo ? 'デモいいね ' : 'いいね ') + demoState.likes + ' 件';
     const pet = $('pet-face'); pet.classList.remove('pet-bounce'); void pet.offsetWidth; pet.classList.add('pet-bounce');
     notify('💜 ' + event.sender + ' さんがいいね ×' + event.count);
   } else if (event.type === 'attendance') {
     const marks = $('stamps').children;
     for (let i = 0; i < marks.length; i++) marks[i].textContent = i < (demoState.attendance % 6) ? '🌸' : '○';
-    notify('🌸 ' + event.sender + ' さんが出席（デモ）');
-  } else if (event.type === 'follow') notify('✨ ' + event.sender + ' さんがフォロー（デモ）');
-  else if (event.type === 'comment') notify('💬 ' + event.sender + ' さんがコメント（デモ）');
+    notify('🌸 ' + event.sender + ' さんが出席' + (isDemo ? '（デモ）' : ''));
+  } else if (event.type === 'follow') notify('✨ ' + event.sender + ' さんがフォロー' + (isDemo ? '（デモ）' : ''));
+  else if (event.type === 'comment') notify('💬 ' + event.sender + ' さんがコメント' + (isDemo ? '（デモ）' : ''));
+}
+function onOverlayEvent(key, raw) {
+  if (overlayCursor && key <= overlayCursor) return;
+  overlayCursor = key;
+  try { localStorage.setItem(overlayCursorKey, key); } catch (e) { console.warn('イベント位置の保存失敗', e); }
+  const event = normalizeOverlayEvent(raw);
+  if (!event || event.type === 'gift') return;
+  demoInteraction(event.type, event.sender, event.count, false);
 }
 function startDemo() {
   state = emptyStats(); render(); $('mode').textContent = 'DEMO · 実データ未接続';
@@ -92,14 +102,19 @@ async function start() {
   $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + ' · 接続中';
   try {
     // デモ時はFirebase SDKを一切読み込まない。実配信時だけ遅延ロードする。
-    const { latestQueueKey, watchQueueAfter, watchConnection } = await import('../js/store.js');
+    const { latestQueueKey, watchQueueAfter, watchConnection, latestOverlayEventKey, watchOverlayEventsAfter } = await import('../js/store.js');
     // 初回だけ過去のキューを飛ばす。再起動後は保存したカーソル以降を処理する。
     if (state.cursor === null) { state.cursor = await latestQueueKey(env); save(); }
     unsubscribeConnection = watchConnection(ok => {
       $('mode').textContent = (env === 'prod' ? '本番' : 'テスト') + (ok ? ' · 接続済み' : ' · オフライン');
     });
     unsubscribeQueue = watchQueueAfter(env, state.cursor, (key,item) => onGift(key,item));
+    try {
+      overlayCursor = localStorage.getItem(overlayCursorKey);
+      if (!overlayCursor) { overlayCursor = await latestOverlayEventKey(env); if (overlayCursor) localStorage.setItem(overlayCursorKey, overlayCursor); }
+      unsubscribeOverlay = watchOverlayEventsAfter(env, overlayCursor, onOverlayEvent);
+    } catch (e) { console.warn('追加イベント購読失敗', e); }
   } catch(e) { $('mode').textContent = 'Firebase接続エラー'; console.error('Overlay read failed',e); }
 }
-addEventListener('pagehide', () => { unsubscribeQueue?.(); unsubscribeConnection?.(); clearInterval(demoTimer); });
+addEventListener('pagehide', () => { unsubscribeQueue?.(); unsubscribeOverlay?.(); unsubscribeConnection?.(); clearInterval(demoTimer); });
 start();
