@@ -1,21 +1,88 @@
-:root{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:#f8f6ff;--cyan:#8de4e7;--gold:#d7c59c}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
-#stage{position:relative;width:1080px;height:1920px;transform-origin:top left;background:transparent;padding:30px;display:flex;align-items:flex-start;flex-direction:column;gap:12px}
-section{width:410px;padding:13px 16px;background:linear-gradient(110deg,#1d1931e8,#172633dc);border:1px solid #c2b6dd5e;border-left:3px solid var(--cyan);box-shadow:0 8px 22px #0007;border-radius:8px}
-.panel-head{display:flex;gap:12px;align-items:center;justify-content:space-between;color:var(--cyan);font-size:25px;margin-bottom:9px}
-.panel-head small{font-size:15px;color:#c1b0db}
-select{width:100%;padding:7px 10px;margin-bottom:10px;color:#fff;background:#2b2746;border:1px solid #afa0c585;border-radius:5px;font-size:16px}
-.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.calendar span{display:grid;place-items:center;height:36px;border-radius:5px;background:#1c2432a3;font-size:14px}
-.calendar span.active{background:#7256a7;border:1px solid var(--cyan);color:#fff}
-.calendar span.muted{background:transparent;color:#8f879d}
-ol{margin:0;padding-left:28px;font-size:20px;line-height:1.7}
+/* 和モダン：文字を増やさず「組紐・和紙・隅飾り・青海波」で和を表現 */
+:root{
+ color-scheme:dark;
+ font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+ color:#fbf6ff;
+ --sumi:rgba(20,16,33,.94);
+ --fuji:#a995d8;
+ --mizu:#94e4e9;
+ --kin:#dcc99b;
+ --edge:rgba(220,201,155,.48);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+[hidden]{display:none!important}
+#stage{
+ position:relative;width:1080px;height:1920px;transform-origin:top left;
+ padding:32px 38px;display:flex;align-items:flex-start;flex-direction:column;gap:12px;
+ background:transparent;
+}
+section{
+ position:relative;isolation:isolate;width:418px;padding:16px 19px 17px;
+ background:
+  repeating-linear-gradient(115deg,transparent 0 14px,rgba(240,225,255,.022) 14px 15px,transparent 15px 28px),
+  linear-gradient(115deg,rgba(38,29,59,.94),rgba(26,30,48,.92) 69%,rgba(18,44,55,.89));
+ border:1px solid var(--edge);
+ border-left:4px solid var(--mizu);
+ border-radius:2px;
+ clip-path:polygon(0 0,calc(100% - 17px) 0,100% 17px,100% 100%,17px 100%,0 calc(100% - 17px));
+ box-shadow:0 10px 26px rgba(0,0,0,.42),inset 0 0 0 5px rgba(210,188,142,.035);
+}
+/* 二重罫線は障子・漆器の縁、隅飾りは金継ぎのイメージ */
+section::before{
+ content:"";position:absolute;inset:7px;z-index:-1;pointer-events:none;
+ border:1px solid rgba(220,201,155,.20);
+ clip-path:polygon(0 0,calc(100% - 11px) 0,100% 11px,100% 100%,11px 100%,0 calc(100% - 11px));
+}
+section::after{
+ content:"";position:absolute;top:0;right:17px;width:54px;height:2px;
+ background:linear-gradient(90deg,transparent,var(--kin));pointer-events:none;
+}
+.panel-head{
+ position:relative;display:flex;gap:12px;align-items:center;justify-content:space-between;
+ margin-bottom:12px;padding-bottom:9px;
+ font-family:"Yu Mincho","Hiragino Mincho ProN",serif;
+ font-size:27px;font-weight:700;color:var(--mizu);
+ border-bottom:1px solid rgba(220,201,155,.36);
+ text-shadow:0 2px 9px rgba(0,0,0,.7);
+}
+.panel-head::after{
+ content:"";position:absolute;bottom:-2px;left:0;width:74px;height:3px;
+ background:linear-gradient(90deg,var(--kin),var(--fuji),transparent);
+}
+.panel-head small{
+ font-family:"Hiragino Kaku Gothic ProN",sans-serif;
+ font-size:13px;letter-spacing:2px;color:var(--kin);
+}
+select{
+ width:100%;margin-bottom:10px;padding:8px 12px;
+ color:#fbf6ff;background:rgba(33,26,53,.9);border:1px solid rgba(220,201,155,.40);
+ border-radius:2px;font-size:16px;
+}
+.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.calendar span{
+ display:grid;place-items:center;height:36px;
+ background:rgba(12,24,38,.65);border:1px solid rgba(220,201,155,.14);
+ border-radius:2px;font-size:14px;font-variant-numeric:tabular-nums;
+}
+.calendar span.active{
+ color:#fff;border:1px solid var(--kin);
+ background:linear-gradient(135deg,#8065b9,#456d83);
+ box-shadow:inset 0 0 0 2px rgba(220,201,155,.18),0 0 10px rgba(148,228,233,.17);
+}
+.calendar span.muted{background:transparent;border-color:transparent}
+ol{margin:0;padding-left:29px;font-size:19px;line-height:1.75}
 li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.feed{display:flex;flex-direction:column;gap:6px;max-height:285px;overflow:hidden}
-.item{display:flex;gap:9px;padding:7px 3px;border-bottom:1px solid #eee2ff23;font-size:17px;overflow-wrap:anywhere}
-.item strong{color:#bfeef4;font-weight:700}
+li::marker{color:var(--kin);font-family:Georgia,serif}
+.feed{display:flex;flex-direction:column;gap:3px;max-height:285px;overflow:hidden}
+.item{
+ display:flex;gap:10px;padding:9px 3px;border-bottom:1px solid rgba(220,201,155,.24);
+ font-size:17px;line-height:1.35;overflow-wrap:anywhere;
+}
+.item strong{flex-shrink:0;color:var(--mizu);font-weight:700}
 .item .detail{flex:1;min-width:0}
-.item .date{color:#bbb2c8;font-size:12px}
-.status{font-size:12px;opacity:.65;text-shadow:0 2px 4px #000}
+.item .date{color:#c8b6ce;font-size:12px}
+.status{font-size:12px;opacity:.7;text-shadow:0 2px 4px #000}
 body[data-layout="compact"] .calendar-panel{display:none}
 body[data-layout="minimal"] .calendar-panel,body[data-layout="minimal"] .likes-panel{display:none}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
