@@ -14,10 +14,17 @@
           ".read": "$env === 'prod' || $env === 'test'"
         },
         "dedupe": {
-          ".indexOn": [".value"]
+          ".indexOn": [
+            ".value"
+          ]
         },
         "state": {
           ".read": "$env === 'prod' || $env === 'test'"
+        },
+        "overlay": {
+          "events": {
+            ".read": "$env === 'prod' || $env === 'test'"
+          }
         }
       }
     }
