@@ -38,6 +38,7 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
+import { processOverlayEvent } from './overlay-events.js';
 import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
 import { handleDisplay, releaseByAdmin } from './display.js';
 
@@ -303,6 +304,16 @@ export default {
 
     try {
       const db = createDb(env);
+
+      if (url.pathname === '/overlay/webhook') {
+        if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) return reply(cors, 401, { error: 'unauthorized' });
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'invalid env' });
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+        const fields = await readFields(request, url);
+        const result = await processOverlayEvent(db, envName, fields);
+        return reply(cors, 200, result);
+      }
 
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
