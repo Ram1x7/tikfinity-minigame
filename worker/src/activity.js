@@ -44,7 +44,7 @@ export async function saveActivity(db,envName,fields,forcedType='',now=Date.now(
 }
 export async function getActivity(db,envName){
  const base='envs/'+envName+'/overlay/private';
- const [people,events]=await Promise.all([db.get(base+'/users'),db.get(base+'/recent',{limitToLast:'70'})]);
+ const [people,events]=await Promise.all([db.get(base+'/users'),db.get(base+'/recent',{orderBy:'"$key"',limitToLast:'70'})]);
  const users=Object.entries(people||{}).map(([id,x])=>({id,name:String(x.name||'視聴者').slice(0,40),likes:Number(x.likes)||0,days:Object.keys(x.days||{}).sort()})).sort((a,b)=>b.likes-a.likes).slice(0,100);
  const recent=Object.entries(events||{}).map(([id,x])=>({id,type:x.type,name:String(x.name||'視聴者').slice(0,40),amount:Number(x.amount)||1,at:Number(x.at)||0,message:String(x.message||'').slice(0,250),gift:String(x.gift||'').slice(0,70)})).sort((a,b)=>b.at-a.at);
  return {users,recent};
