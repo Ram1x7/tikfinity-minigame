@@ -43,6 +43,8 @@ const speed = Math.min(5, Math.max(0.2, Number(params.get('speed')) || 1));
 const preview = params.get('preview') === '1';
 const demoParam = params.get('demo');
 const demo = ['1', 'gacha', 'roulette'].includes(demoParam) ? demoParam : null;
+// &timerDemo=1 は demo=... と併用する場合だけ有効。本番のデータには触れない。
+const timerDemo = Boolean(demo) && params.get('timerDemo') === '1';
 const guide = params.get('guide') === '1';
 const debug = params.get('debug') === '1' || (demo && !guide);
 // 配信用に大きく縮小される時、細い線が飛び飛びに拾われて文字が崩れるのを防ぐための、ごく軽いぼかし
@@ -69,7 +71,7 @@ const restraintEl = document.getElementById('restraint-overlay');
 let restraintState = null;
 function renderRestraintOverlay() {
   if (!restraintEl) return;
-  if (!restraintState || demo || preview) { restraintEl.hidden = true; return; }
+  if (!restraintState || (demo && !timerDemo) || preview) { restraintEl.hidden = true; return; }
   const current = advanceTimers(restraintState, Date.now());
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
@@ -102,6 +104,19 @@ function renderRestraintOverlay() {
     cards.push(more);
   }
   restraintEl.replaceChildren(...cards);
+}
+// 描画確認用。疑似タイマーはローカルだけで進み、Worker/Firebaseには送信しない。
+if (timerDemo) {
+  const now = Date.now();
+  restraintState = {
+    paused: false, updatedAt: now,
+    entries: [
+      { id: 'fish-demo', label: '釣り縛り', group: 'exclusive', status: 'active', remainingMs: 9 * 60000 + 42000, totalMs: 10 * 60000 },
+      { id: 'bug-demo', label: '虫捕り縛り', group: 'exclusive', status: 'waiting', remainingMs: 10 * 60000, totalMs: 10 * 60000 },
+      { id: 'jump-demo', label: 'ジャンプ禁止', group: 'parallel', status: 'active', remainingMs: 4 * 60000 + 30000, totalMs: 5 * 60000 },
+    ],
+  };
+  renderRestraintOverlay();
 }
 setInterval(renderRestraintOverlay, 1000);
 async function awardRestraint(key, index) {
