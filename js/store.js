@@ -92,3 +92,8 @@ export function watchRecentLog(env, count, onChange) {
 export function watchDisplayState(env, onChange) {
   return onValue(envRef(env, 'state/display'), (snap) => onChange(snap.val() || {}));
 }
+
+/** タイマー状態のリアルタイム購読（読み取りのみ） */
+export function watchRestraints(env, onChange) {
+  return onValue(envRef(env, 'state/restraints'), (snap) => onChange(snap.val() || null));
+}
