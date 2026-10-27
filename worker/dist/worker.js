@@ -313,6 +313,7 @@ const copy = (state) => ({
   paused: Boolean(state?.paused),
   updatedAt: Number(state?.updatedAt) || 0,
   entries: Array.isArray(state?.entries) ? state.entries.map((x) => ({ ...x })) : [],
+  applied: state?.applied && typeof state.applied === 'object' ? { ...state.applied } : {},
 });
 const active = (x) => x.status === 'active';
 const exclusive = (x) => x.group === 'exclusive';
