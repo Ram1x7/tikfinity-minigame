@@ -64,6 +64,38 @@ const resultsEl = document.getElementById('ev-results');
 const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
 const debugEl = document.getElementById('debug');
+const restraintEl = document.getElementById('restraint-overlay');
+let restraintState = null;
+function renderRestraintOverlay() {
+  if (!restraintState || demo || preview) { restraintEl.hidden = true; return; }
+  const elapsed = restraintState.paused ? 0 : Math.max(0, Date.now() - (restraintState.updatedAt || Date.now()));
+  const entries = (restraintState.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
+  restraintEl.hidden = entries.length === 0;
+  restraintEl.replaceChildren(...entries.slice(0, 5).map((x) => {
+    const remaining = Math.max(0, Number(x.remainingMs || 0) - (x.status === 'active' ? elapsed : 0));
+    const secs = Math.ceil(remaining / 1000);
+    const row = document.createElement('div');
+    row.className = 'restraint-row' + (x.status === 'waiting' ? ' waiting' : '');
+    const label = document.createElement('div');
+    label.className = 'restraint-label'; label.textContent = x.label;
+    const meta = document.createElement('div'); meta.className = 'restraint-meta';
+    const status = document.createElement('span'); status.className = 'restraint-state';
+    status.textContent = restraintState.paused ? '停止中' : x.status === 'waiting' ? '待機中' : '実行中';
+    const clock = document.createElement('span'); clock.className = 'restraint-clock';
+    clock.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+    meta.append(status, clock); row.append(label, meta); return row;
+  }));
+}
+setInterval(renderRestraintOverlay, 1000);
+async function awardRestraint(key, index) {
+  if (!player || !player.active || !player.canPlay()) return;
+  const p = playerParams(params);
+  const url = new URL(p.workerUrl + '/display/restraints?env=' + env);
+  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dk: p.dk, type: 'award', key, index }) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || '縛りタイマーの登録に失敗しました');
+}
 
 function notice(text) {
   noticeEl.hidden = !text;
@@ -311,7 +343,7 @@ function showSender(name) {
   }
 }
 
-async function playItem(item) {
+async function playItem(item, key) {
   const rolls = Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {});
   const pool = Array.isArray(item.pool) ? item.pool : Object.values(item.pool || {});
   if (rolls.length === 0) return;
@@ -360,6 +392,10 @@ async function playItem(item) {
         onCard: () => { if (theme.resultCard) eventEl.classList.add('event--card'); },
       });
     } else await playGacha(playEl, rolls[i], { speed });
+    if (mode === 'roulette' && rolls[i].timer && key && !preview && !demo) {
+      // 失敗した場合は再生位置を進めない。再試行時もWorker側のイベントIDで二重加算を防ぐ。
+      await awardRestraint(key, i);
+    }
     addChip(rolls[i], { inCard: eventEl.classList.contains('event--card') });
     await sleep(RESULT_HOLD_MS);
     if (i < rolls.length - 1) await sleep(ROLL_GAP_MS);
@@ -386,7 +422,7 @@ async function drain() {
     const { key, item } = queue.shift();
     updatePending();
     try {
-      if (!isStale(item)) await playItem(item);
+      if (!isStale(item)) await playItem(item, key);
     } catch (err) {
       console.error('再生に失敗しました', err);
     }
@@ -454,6 +490,7 @@ async function start() {
 
   watchConnection((ok) => setStatus('firebase', ok ? '' : 'Firebase に接続できません'));
   watchConfig(env, (config) => { settings = { staleMinutes: 10, ...config.settings }; });
+  if (!preview) store.watchRestraints(env, (value) => { restraintState = value; renderRestraintOverlay(); });
 
   const follow = (cursor) => {
     const seen = new Set();
