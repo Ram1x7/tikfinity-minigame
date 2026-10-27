@@ -58,8 +58,9 @@ export function awardTimer(state, rule, now) {
   }
   const existing = s.entries.find((x) => x.id === id && x.status !== 'done');
   if (existing) {
-    existing.remainingMs = Math.min(MAX_REMAINING_MS, remaining(existing) + durationMs);
-    existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || remaining(existing)) + durationMs);
+    const before = remaining(existing);
+    existing.remainingMs = Math.min(MAX_REMAINING_MS, before + durationMs);
+    existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || before) + durationMs);
     return s;
   }
   const hasExclusive = s.entries.some((x) => active(x) && exclusive(x));
