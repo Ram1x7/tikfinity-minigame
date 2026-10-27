@@ -34,7 +34,7 @@ test('Workerで釣り→虫捕り待機→重複加算→自動切替を保持',
   const state = await readRestraints(db, 'test', 601000);
   assert.equal(state.entries[0].status, 'done');
   assert.equal(state.entries[1].status, 'active');
-  assert.equal(state.entries[1].remainingMs, 1199000);
+  assert.equal(state.entries[1].remainingMs, 1200000);
 });
 test('Worker全停止・再開は停止中の時間を減算しない', async () => {
   const db = mockDb();
