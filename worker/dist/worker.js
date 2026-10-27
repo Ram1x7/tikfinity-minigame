@@ -872,7 +872,7 @@ async function updateRestraints(db, envName, action, now = Date.now()) {
   const path = pathFor(envName);
   for (let i = 0; i < TRIES; i++) {
     const { value, etag } = await db.getWithEtag(path);
-    const old = value && typeof value === 'object' ? value : { paused: true, updatedAt: now, entries: [], applied: {} };
+    const old = value && typeof value === 'object' ? value : { paused: false, updatedAt: now, entries: [], applied: {} };
     const applied = old.applied && typeof old.applied === 'object' ? old.applied : {};
     let next;
     if (action.type === 'award') {
@@ -897,7 +897,7 @@ async function updateRestraints(db, envName, action, now = Date.now()) {
 }
 async function readRestraints(db, envName, now = Date.now()) {
   const value = await db.get(pathFor(envName));
-  return advanceTimers(value || { paused: true, updatedAt: now, entries: [] }, now);
+  return advanceTimers(value || { paused: false, updatedAt: now, entries: [] }, now);
 }
 
 // ---- worker/src/index.js ----
