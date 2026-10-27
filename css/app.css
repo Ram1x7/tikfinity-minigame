@@ -277,3 +277,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
 .layout-previews figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
 /* プレビューサイト(テスト専用の環境)の目印 */
 .env-switch__item.env-preview { background: #8a4fd0; color: #fff; }
+
+/* 縛りタイマー設定は抽選候補の下段に配置 */
+.cand > label.field, .cand > .grid2 { grid-column: 1 / -1; }
+.cand > label.field { display:flex; align-items:center; gap:8px; font-size:14px; }
+.cand > .grid2[hidden] { display:none; }
+#restraint-list .item { margin-top:10px; }
