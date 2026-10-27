@@ -5,8 +5,8 @@
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
 import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
-import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer } from './api.js';
+import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints } from './store.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
 import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
@@ -156,6 +156,44 @@ $('player-release').addEventListener('click', async () => {
     toast(err.message, true);
   }
 });
+
+
+// ---------------- 縛りタイマー管理 ----------------
+let restraintSnapshot = null;
+function timerTime(ms) {
+  const seconds = Math.ceil(Math.max(0, ms) / 1000);
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+async function restraintAction(body) {
+  try { await controlRestraints(env, body); }
+  catch (err) { toast(err.message, true); }
+}
+$('restraint-pause').addEventListener('click', () => restraintAction({ type: 'pause-all' }));
+$('restraint-resume').addEventListener('click', () => restraintAction({ type: 'resume-all' }));
+function renderRestraints() {
+  const s = restraintSnapshot;
+  $('restraint-status').textContent = !s ? 'タイマー未開始（初回は全再開してください）'
+    : s.paused ? '全停止中' : 'カウント中';
+  const list = $('restraint-list');
+  const now = Date.now();
+  const delta = s && !s.paused ? Math.max(0, now - (s.updatedAt || now)) : 0;
+  list.replaceChildren(...(s?.entries || []).filter((x) => x.status !== 'done').map((x) => {
+    const ms = Math.max(0, (x.remainingMs || 0) - (x.status === 'active' ? delta : 0));
+    return h('div', { class: 'item' },
+      h('div', { class: 'item__row' },
+        h('strong', {}, x.label),
+        h('span', {}, x.status === 'waiting' ? '待機中' : '実行中'),
+        h('strong', {}, timerTime(ms))),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn--small', onclick: () => restraintAction({ type: 'adjust', id: x.id, amountMs: 60000 }) }, '+1分'),
+        h('button', { class: 'btn btn--small', onclick: () => restraintAction({ type: 'adjust', id: x.id, amountMs: -60000 }) }, '-1分'),
+        h('button', { class: 'btn btn--small btn--danger', onclick: () => {
+          if (confirm(`${x.label}を終了しますか？`)) restraintAction({ type: 'finish', id: x.id });
+        } }, '終了')));
+  }));
+}
+watchRestraints(env, (value) => { restraintSnapshot = value; renderRestraints(); });
+setInterval(renderRestraints, 1000);
 
 // ---------------- ギフト設定 ----------------
 function select(options, value, onChange) {
