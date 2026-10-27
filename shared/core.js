@@ -157,6 +157,21 @@ function sanitizeItem(it) {
     weight: Math.max(0, Math.min(1e6, Number(it.weight) || 0)),
     rarity: RARITIES.includes(it.rarity) ? it.rarity : 'N',
     color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : '',
+    // 空欄なら従来どおりタイマーなし。IDは重複当選の加算キー。
+    timer: sanitizeTimer(it.timer),
+  };
+}
+
+function sanitizeTimer(input) {
+  if (!input || input.enabled !== true) return null;
+  const id = str(input.id, 100);
+  const minutes = Number(input.minutes);
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id) ||
+      !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) return null;
+  return {
+    id,
+    durationMs: Math.round(minutes * 60000),
+    group: input.group === 'parallel' ? 'parallel' : 'exclusive',
   };
 }
 
@@ -232,7 +247,7 @@ export function buildQueueItem(gift, config, rand = secureRandom) {
   const rolls = [];
   for (let i = 0; i < count; i++) {
     const it = weightedPick(items, rand);
-    rolls.push({ label: it.label, rarity: it.rarity || 'N', color: it.color || '' });
+    rolls.push({ label: it.label, rarity: it.rarity || 'N', color: it.color || '', ...(it.timer ? { timer: { ...it.timer, label: it.label } } : {}) });
   }
 
   return {
