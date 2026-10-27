@@ -105,3 +105,8 @@ export function watchOverlayEventsAfter(env, cursor, onItem) {
   const q = cursor ? query(base, orderByKey(), startAfter(cursor)) : query(base, orderByKey());
   return onChildAdded(q, snap => onItem(snap.key, snap.val()));
 }
+
+/** タイマー状態のリアルタイム購読（読み取りのみ） */
+export function watchRestraints(env, onChange) {
+  return onValue(envRef(env, 'state/restraints'), (snap) => onChange(snap.val() || null));
+}

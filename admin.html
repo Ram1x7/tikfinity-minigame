@@ -95,6 +95,19 @@
 
     <section class="card">
       <div class="card__head">
+        <h2>縛りタイマー</h2>
+      </div>
+      <p class="hint">配信終了時は「全停止」、次回開始時は「全再開」を押してください。自動終了検知はありません。</p>
+      <div class="btn-row">
+        <button class="btn" id="restraint-pause">全停止</button>
+        <button class="btn btn--primary" id="restraint-resume">全再開</button>
+      </div>
+      <p class="hint" id="restraint-status">確認中…</p>
+      <div class="stack" id="restraint-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
         <h2>受信ログ</h2>
         <span class="hint" id="log-conn"></span>
       </div>
