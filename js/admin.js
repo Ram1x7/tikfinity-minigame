@@ -271,7 +271,7 @@ function renderTables() {
       probCells.push(prob);
       const timer = it.timer || {};
       const timerEnabled = Boolean(timer.enabled);
-      const timerControls = h('div', { class: 'grid2', style: 'margin-top:8px' },
+      const timerControls = h('div', { class: 'grid2' },
         h('label', { class: 'field' }, '縛りID（同じIDなら時間加算）',
           h('input', { type: 'text', maxLength: 100, placeholder: '例: fishing', value: timer.id || '',
             oninput: (e) => { it.timer = { ...it.timer, id: e.target.value }; markDirty(); } })),
