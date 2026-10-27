@@ -31,6 +31,7 @@ import { loadTheme, fitText, themeRarityColor } from './theme.js';
 import { parseLayout, fitPanel, textBoost } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
 import { createPlayer, playerParams } from './player.js';
+import { advanceTimers } from '../shared/restraint-timers.js';
 
 // Firebase(js/store.js)は demo のときは読み込まない(接続できない環境でも見本を表示できるように)
 let store = null;
@@ -68,11 +69,11 @@ const restraintEl = document.getElementById('restraint-overlay');
 let restraintState = null;
 function renderRestraintOverlay() {
   if (!restraintState || demo || preview) { restraintEl.hidden = true; return; }
-  const elapsed = restraintState.paused ? 0 : Math.max(0, Date.now() - (restraintState.updatedAt || Date.now()));
-  const entries = (restraintState.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
+  const current = advanceTimers(restraintState, Date.now());
+  const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
   restraintEl.replaceChildren(...entries.slice(0, 5).map((x) => {
-    const remaining = Math.max(0, Number(x.remainingMs || 0) - (x.status === 'active' ? elapsed : 0));
+    const remaining = Math.max(0, Number(x.remainingMs || 0));
     const secs = Math.ceil(remaining / 1000);
     const row = document.createElement('div');
     row.className = 'restraint-row' + (x.status === 'waiting' ? ' waiting' : '');
