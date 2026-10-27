@@ -92,7 +92,7 @@ async function awardRestraint(key, index) {
   const p = playerParams(params);
   const url = new URL(p.workerUrl + '/display/restraints?env=' + env);
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dk: p.dk, type: 'award', key, index }) });
+    body: JSON.stringify({ dk: p.displayKey, type: 'award', key, index }) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || '縛りタイマーの登録に失敗しました');
 }
@@ -425,6 +425,13 @@ async function drain() {
       if (!isStale(item)) await playItem(item, key);
     } catch (err) {
       console.error('再生に失敗しました', err);
+      // タイマー付き結果を取りこぼさないよう、失敗した抽選は再試行する。
+      if (item?.mode === 'roulette' && (Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {})).some((r) => r.timer)) {
+        queue.unshift({ key, item });
+        updatePending();
+        await sleep(5000);
+        continue;
+      }
     }
     // 失敗しても先に進む(同じ項目で止まり続けないように)。保存は裏でやり直し続ける
     if (player) player.saveCursor(key);
