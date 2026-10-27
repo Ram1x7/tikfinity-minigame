@@ -39,7 +39,7 @@ function fromStored(cfg) {
   return {
     gifts: Object.values(cfg.gifts || {}).map((g) => ({ ...g })),
     tables: Object.entries(cfg.tables || {}).map(([id, t]) => ({
-      id, title: t.title || '', items: (t.items || []).map((it) => ({ ...it })),
+      id, title: t.title || '', items: (t.items || []).map((it) => ({ ...it, timer: it.timer ? { ...it.timer, enabled: true, minutes: it.timer.minutes ?? it.timer.durationMs / 60000 } : null })),
     })),
     settings: { ...DEFAULT_SETTINGS, ...(cfg.settings || {}) },
   };
