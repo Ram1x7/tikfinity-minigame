@@ -1,3 +1,4 @@
+import { advanceTimers } from '../shared/restraint-timers.js';
 // ============================================================
 // js/admin.js  管理画面
 // ------------------------------------------------------------
@@ -175,14 +176,13 @@ function renderRestraints() {
   $('restraint-status').textContent = !s ? 'タイマー未開始（初回は全再開してください）'
     : s.paused ? '全停止中' : 'カウント中';
   const list = $('restraint-list');
-  const now = Date.now();
-  const delta = s && !s.paused ? Math.max(0, now - (s.updatedAt || now)) : 0;
-  list.replaceChildren(...(s?.entries || []).filter((x) => x.status !== 'done').map((x) => {
-    const ms = Math.max(0, (x.remainingMs || 0) - (x.status === 'active' ? delta : 0));
+  const current = s ? advanceTimers(s, Date.now()) : null;
+  list.replaceChildren(...(current?.entries || []).filter((x) => x.status !== 'done').map((x) => {
+    const ms = Math.max(0, x.remainingMs || 0);
     return h('div', { class: 'item' },
       h('div', { class: 'item__row' },
         h('strong', {}, x.label),
-        h('span', {}, x.status === 'waiting' ? '待機中' : '実行中'),
+        h('span', {}, x.status === 'waiting' ? '待機中' : x.group === 'parallel' ? '並行中' : '実行中'),
         h('strong', {}, timerTime(ms))),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn--small', onclick: () => restraintAction({ type: 'adjust', id: x.id, amountMs: 60000 }) }, '+1分'),
