@@ -231,6 +231,19 @@ function renderTables() {
     const rows = table.items.map((it, i) => {
       const prob = h('span', { class: 'prob' });
       probCells.push(prob);
+      const timer = it.timer || {};
+      const timerEnabled = Boolean(timer.enabled);
+      const timerControls = h('div', { class: 'grid2', style: 'margin-top:8px' },
+        h('label', { class: 'field' }, '縛りID（同じIDなら時間加算）',
+          h('input', { type: 'text', maxLength: 100, placeholder: '例: fishing', value: timer.id || '',
+            oninput: (e) => { it.timer = { ...it.timer, id: e.target.value }; markDirty(); } })),
+        h('label', { class: 'field' }, '制限時間（分）',
+          h('input', { type: 'number', min: 1, max: 1440, step: 1, value: timer.minutes ?? 10,
+            oninput: (e) => { it.timer = { ...it.timer, minutes: Number(e.target.value) }; markDirty(); } })),
+        h('label', { class: 'field' }, '同時実行',
+          select([['exclusive', '専用行動（釣り・虫捕りなど）'], ['parallel', '並行可能（ジャンプ禁止など）']],
+            timer.group || 'exclusive', (v) => { it.timer = { ...it.timer, group: v }; markDirty(); })));
+      timerControls.hidden = !timerEnabled;
       return h('div', { class: 'cand' },
         h('input', { class: 'cand__label', type: 'text', value: it.label || '', placeholder: '内容(例: 魚を3匹釣るまで他の行動禁止)', maxLength: LIMITS.label,
           oninput: (e) => { it.label = e.target.value; markDirty(); } }),
@@ -240,7 +253,14 @@ function renderTables() {
         prob,
         h('button', { class: 'btn btn--small btn--danger', title: '削除', onclick: () => {
           table.items.splice(i, 1); markDirty(); renderTables();
-        } }, '×'));
+        } }, '×'),
+        h('label', { class: 'field' }, h('input', { type: 'checkbox', checked: timerEnabled,
+          onchange: (e) => {
+            it.timer = { ...it.timer, enabled: e.target.checked, id: it.timer?.id || ('rule_' + table.id + '_' + i),
+              minutes: it.timer?.minutes ?? 10, group: it.timer?.group || 'exclusive' };
+            timerControls.hidden = !e.target.checked; markDirty();
+          } }), ' 縛りタイマーを使用'),
+        timerControls);
     });
     updateProbabilities(table, probCells);
 
