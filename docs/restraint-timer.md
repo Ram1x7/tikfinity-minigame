@@ -38,3 +38,26 @@ SVGは背景透過の装飾素材。文字・残り時間・進捗は描画時�
 6. 本番管理画面でタイマー設定をONにする。前回配信終了時に全停止した場合は、配信前に「全再開」
 
 **注意**：GitHub Pagesの公開とCloudflare Workerのデプロイは別操作です。GitHubへのコード追加だけではWorkerは更新されません。タイマー機能の本番投入にはWorkerの更新が必要です。配信終了の自動検知は未実装です。
+
+## Firebaseに触れない表示プレビュー
+GitHub Pagesの本番サイトへは未反映のため、ブランチのファイルをローカルHTTPサーバーまたはPRのプレビュー環境で配信する。
+`display.html?demo=roulette&timerDemo=1&theme=wafu`
+を開くと、釣り（実行中）、虫捕り（待機中）、ジャンプ禁止（並行中）の3種類のタイマーが表示される。これはローカルの疑似状態であり、Firebase・Workerへの読み書きは行わない。
+
+## Workerの安全なテストデプロイ
+1. Cloudflareに**本番とは別名**のテスト専用Workerを用意する。既存Workerを上書きしない。
+2. 統合PRの `worker/dist/worker.js` を貼り付けてデプロイする。
+3. WorkerのSecretsに `FIREBASE_DB_URL` `SA_CLIENT_EMAIL` `SA_PRIVATE_KEY` `ADMIN_KEY` `DISPLAY_KEY_TEST` を設定する（値をGitHubやチャットに貼らない）。`WEBHOOK_KEY` `DISPLAY_KEY_PROD` は接続診断に使うため必要に応じて設定する。
+4. **`ALLOWED_ENVS=test` を必ず設定**して、本番環境の読み書きを禁止する。
+5. テスト用Workerの `GET /` が正しいサービス情報を返すか確認する。さらに `POST /display/claim?env=prod` が403を返すことを確認する。
+6. 管理画面のテスト環境でWorker URLと合言葉を設定し、「接続テスト」を実施する。表示用URLはテスト専用にする。
+7. テスト用の抽選テーブルに10分釣り縛り・10分虫捕り縛り・並行ジャンプ禁止を設定し、疑似ギフトで順番待ちと時間加算を確認する。
+8. 合格まで本番の `ALLOWED_ENVS` や既存Worker URL、PRISMのブラウザソースは変更しない。
+
+## 本番導入の判定
+- 最新のPRコミットで `CI` と `Restraint timer validation` が成功
+- `npm run check` が成功し、Worker配布コードが最新
+- テストWorkerからFirebaseへの読み書き成功
+- 本番拒否403の確認
+- PRISM/iPadの装飾・文字・タイマー進行の実機確認
+- 既存ガチャ・ルーレットが変わらず動作
