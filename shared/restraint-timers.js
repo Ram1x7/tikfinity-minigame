@@ -59,11 +59,12 @@ export function awardTimer(state, rule, now) {
   const existing = s.entries.find((x) => x.id === id && x.status !== 'done');
   if (existing) {
     existing.remainingMs = Math.min(MAX_REMAINING_MS, remaining(existing) + durationMs);
+    existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || remaining(existing)) + durationMs);
     return s;
   }
   const hasExclusive = s.entries.some((x) => active(x) && exclusive(x));
   s.entries.push({
-    id, label, group, remainingMs: durationMs,
+    id, label, group, remainingMs: durationMs, totalMs: durationMs,
     status: group === 'parallel' || !hasExclusive ? 'active' : 'waiting',
   });
   return s;
@@ -82,6 +83,7 @@ export function controlTimers(state, action, now, id = '', amountMs = 0) {
       const n = Math.floor(Number(amountMs));
       if (!Number.isFinite(n) || Math.abs(n) > MAX_DURATION_MS) throw new Error('調整時間が不正です');
       x.remainingMs = Math.min(MAX_REMAINING_MS, Math.max(0, remaining(x) + n));
+      x.totalMs = Math.max(x.remainingMs, Number(x.totalMs) || x.remainingMs);
       if (!x.remainingMs) x.status = 'done';
     } else throw new Error('操作が不正です');
     startNext(s);
