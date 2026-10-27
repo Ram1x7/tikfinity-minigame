@@ -105,7 +105,7 @@ function renderRestraintOverlay() {
 }
 setInterval(renderRestraintOverlay, 1000);
 async function awardRestraint(key, index) {
-  if (!player || !player.active || !player.canPlay()) return;
+  if (!player || !player.active || !player.canPlay()) throw new Error('再生担当の接続が切れています');
   const p = playerParams(params);
   const url = new URL(p.workerUrl + '/display/restraints?env=' + env);
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
