@@ -68,24 +68,40 @@ const debugEl = document.getElementById('debug');
 const restraintEl = document.getElementById('restraint-overlay');
 let restraintState = null;
 function renderRestraintOverlay() {
+  if (!restraintEl) return;
   if (!restraintState || demo || preview) { restraintEl.hidden = true; return; }
   const current = advanceTimers(restraintState, Date.now());
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
-  restraintEl.replaceChildren(...entries.slice(0, 5).map((x) => {
+  const cards = entries.slice(0, 4).map((x) => {
     const remaining = Math.max(0, Number(x.remainingMs || 0));
     const secs = Math.ceil(remaining / 1000);
     const row = document.createElement('div');
-    row.className = 'restraint-row' + (x.status === 'waiting' ? ' waiting' : '');
+    row.className = 'restraint-row' +
+      (x.status === 'waiting' ? ' waiting' : x.group === 'parallel' ? ' parallel' : '') +
+      (current.paused ? ' paused' : '');
+    const top = document.createElement('div'); top.className = 'restraint-top';
     const label = document.createElement('div');
     label.className = 'restraint-label'; label.textContent = x.label;
-    const meta = document.createElement('div'); meta.className = 'restraint-meta';
     const status = document.createElement('span'); status.className = 'restraint-state';
-    status.textContent = restraintState.paused ? '停止中' : x.status === 'waiting' ? '待機中' : '実行中';
+    status.textContent = current.paused ? '停止中' : x.status === 'waiting' ? '待機中' : x.group === 'parallel' ? '並行中' : '実行中';
+    top.append(label, status);
+    const bottom = document.createElement('div'); bottom.className = 'restraint-bottom';
+    const bar = document.createElement('div'); bar.className = 'restraint-progress';
+    const fill = document.createElement('span'); fill.className = 'restraint-progress-fill';
+    const initial = Math.max(1, Number(x.totalMs || x.remainingMs || 1));
+    fill.style.width = Math.max(0, Math.min(100, remaining / initial * 100)) + '%';
+    bar.append(fill);
     const clock = document.createElement('span'); clock.className = 'restraint-clock';
     clock.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
-    meta.append(status, clock); row.append(label, meta); return row;
-  }));
+    bottom.append(bar, clock); row.append(top, bottom); return row;
+  });
+  if (entries.length > 4) {
+    const more = document.createElement('div'); more.className = 'restraint-more';
+    more.textContent = `ほか ${entries.length - 4} 件の縛り`;
+    cards.push(more);
+  }
+  restraintEl.replaceChildren(...cards);
 }
 setInterval(renderRestraintOverlay, 1000);
 async function awardRestraint(key, index) {
