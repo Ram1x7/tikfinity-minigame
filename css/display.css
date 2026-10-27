@@ -464,3 +464,21 @@ body {
   clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
   opacity: 0;
 }
+
+/* 縛りタイマー：既存のガチャ・ルーレットの台紙には干渉しない */
+#restraint-overlay {
+  position: absolute; top: 1120px; left: 70px; width: 480px;
+  z-index: 20; display: flex; flex-direction: column; gap: 12px;
+  font-family: 'Zen Maru Gothic', sans-serif; pointer-events: none;
+}
+#restraint-overlay[hidden] { display: none; }
+.restraint-row {
+  border: 2px solid rgba(215,182,113,.9);
+  border-radius: 16px; background: rgba(15,23,48,.88);
+  color: #f4e8d5; padding: 12px 18px; box-shadow: 0 4px 14px rgba(0,0,0,.2);
+}
+.restraint-row.waiting { opacity: .78; border-color: rgba(166,182,214,.65); }
+.restraint-label { font-size: 28px; font-weight: 700; overflow-wrap: anywhere; }
+.restraint-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.restraint-state { font-size: 20px; color: #c4b3df; }
+.restraint-clock { font-size: 36px; font-weight: 900; color: #f1d18d; font-variant-numeric: tabular-nums; }
