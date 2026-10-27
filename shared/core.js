@@ -193,6 +193,11 @@ export function sanitizeConfig(input) {
       .map(sanitizeItem)
       .filter((it) => it.label);
     if (activeItems({ items }).length === 0) errors.push(`テーブル「${id}」に当選確率が0より大きい候補がありません`);
+    (Array.isArray(t?.items) ? t.items : []).slice(0, LIMITS.itemsPerTable).forEach((raw, index) => {
+      if (raw?.timer?.enabled === true && !sanitizeTimer(raw.timer)) {
+        errors.push(`テーブル「${id}」の候補${index + 1}: タイマーIDは英数字・_・-、時間は1秒〜1440分にしてください`);
+      }
+    });
     tables[id] = { title: str(t && t.title, LIMITS.title) || id, items };
   }
 
