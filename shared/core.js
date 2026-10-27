@@ -163,9 +163,9 @@ function sanitizeItem(it) {
 }
 
 function sanitizeTimer(input) {
-  if (!input || input.enabled !== true) return null;
+  if (!input || input.enabled === false || (input.enabled !== true && input.durationMs === undefined)) return null;
   const id = str(input.id, 100);
-  const minutes = Number(input.minutes);
+  const minutes = Number(input.minutes ?? (Number(input.durationMs) / 60000));
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id) ||
       !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) return null;
   return {
