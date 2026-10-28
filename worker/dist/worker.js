@@ -1110,7 +1110,7 @@ async function processGift(db, envName, fields, source, nowMs = Date.now()) {
         const todos = todoEntries(name, built.item);
         if (Object.keys(todos).length) {
           try {
-            await db.patch(`envs/${envName}/todo/pending`, todos);
+            await db.patch(`envs/${envName}/state/gachaTodo/pending`, todos);
           } catch (error) {
             // タスクの記録失敗時に抽選だけ成功扱いにしない。
             // キューを取り消して、Webhookの再送時にやり直せるようにする。
@@ -1194,7 +1194,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
 
   if (path === '/admin/gacha-todo') {
     const body = await request.json().catch(() => ({}));
-    const pendingPath = `envs/${envName}/todo/pending`;
+    const pendingPath = `envs/${envName}/state/gachaTodo/pending`;
     if (body.type === 'read') return reply(cors, 200, { ok: true, pending: (await db.get(pendingPath)) || {} });
     if (body.type === 'finish') {
       const id = String(body.id || '');
