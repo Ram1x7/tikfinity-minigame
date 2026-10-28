@@ -578,3 +578,9 @@ body {
   content: counter(todo); position: absolute; top: 4px; left: 8px;
   color: #ffdd9e; font-variant-numeric: tabular-nums;
 }
+
+/* 演出中は当選カードを優先。時計の計算とFirebase監視は継続する。 */
+#stage.is-playing #gacha-todo-overlay,
+#stage.is-playing #restraint-overlay {
+  display: none !important;
+}
