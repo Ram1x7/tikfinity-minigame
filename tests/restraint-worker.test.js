@@ -46,3 +46,19 @@ test('Worker全停止・再開は停止中の時間を減算しない', async ()
   const resumed = await readRestraints(db, 'test', 420000);
   assert.equal(resumed.entries[0].remainingMs, 480000);
 });
+
+test('全リセットはタイマーのみ削除し、重複イベント履歴を保持する', async () => {
+  const db = mockDb();
+  const action = { type: 'award', eventId: '-abcdefghij:0', rule: fish };
+  await updateRestraints(db, 'prod', action, 1000);
+  const result = await updateRestraints(db, 'prod', { type: 'reset-all' }, 2000);
+  assert.deepEqual(result.state.entries, []);
+  assert.equal(result.state.paused, false);
+  assert.ok(result.state.applied['-abcdefghij:0']);
+  const retry = await updateRestraints(db, 'prod', action, 3000);
+  assert.equal(retry.duplicate, true);
+  assert.deepEqual(retry.state.entries, []);
+  const next = await updateRestraints(db, 'prod', { ...action, eventId: '-abcdefghij:1' }, 4000);
+  assert.equal(next.duplicate, false);
+  assert.equal(next.state.entries[0].status, 'active');
+});

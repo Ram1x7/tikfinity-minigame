@@ -75,7 +75,8 @@ export function awardTimer(state, rule, now) {
 /** 個別操作と全体一時停止。再開時に過去の停止時間を減算しない。 */
 export function controlTimers(state, action, now, id = '', amountMs = 0) {
   const s = advanceTimers(state, now);
-  if (action === 'pause-all') s.paused = true;
+  if (action === 'reset-all') { s.entries = []; s.paused = false; }
+  else if (action === 'pause-all') s.paused = true;
   else if (action === 'resume-all') s.paused = false;
   else {
     const x = s.entries.find((e) => e.id === id && e.status !== 'done');

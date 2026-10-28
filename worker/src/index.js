@@ -259,7 +259,7 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   if (path === '/admin/restraints') {
     const body = await request.json().catch(() => ({}));
     if (body.type === 'read') return reply(cors, 200, { ok: true, state: await readRestraints(db, envName) });
-    if (!['pause-all', 'resume-all', 'finish', 'adjust'].includes(body.type)) {
+    if (!['pause-all', 'resume-all', 'reset-all', 'finish', 'adjust'].includes(body.type)) {
       return reply(cors, 400, { error: 'タイマー操作が不正です' });
     }
     const result = await updateRestraints(db, envName, body);
