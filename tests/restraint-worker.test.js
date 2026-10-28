@@ -62,3 +62,19 @@ test('全リセットはタイマーのみ削除し、重複イベント履歴�
   assert.equal(next.duplicate, false);
   assert.equal(next.state.entries[0].status, 'active');
 });
+
+test('全リセットで実行中・待機中を消し、過去イベントの二重処理は防止', async () => {
+  const db = mockDb();
+  const action = { type: 'award', eventId: '-abcdefghij:0', rule: fish };
+  await updateRestraints(db, 'prod', action, 1000);
+  await updateRestraints(db, 'prod', { type: 'award', eventId: '-abcdefghij:1', rule: bug }, 2000);
+  const reset = await updateRestraints(db, 'prod', { type: 'reset-all' }, 3000);
+  assert.deepEqual(reset.state.entries, []);
+  assert.equal(reset.state.paused, false);
+  assert.equal(reset.state.applied['-abcdefghij:0'], 1000);
+  const duplicate = await updateRestraints(db, 'prod', action, 4000);
+  assert.equal(duplicate.duplicate, true);
+  assert.deepEqual(duplicate.state.entries, []);
+  const fresh = await updateRestraints(db, 'prod', { ...action, eventId: '-abcdefghij:2' }, 5000);
+  assert.equal(fresh.state.entries[0].status, 'active');
+});
