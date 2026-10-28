@@ -424,7 +424,7 @@ function todoEntries(queueKey, item) {
 function todoSorted(pending) {
   return Object.entries(pending || {})
     .filter(([key, value]) => /^-[A-Za-z0-9_-]{8,40}_[0-9]{3}$/.test(key) && value && typeof value === 'object')
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([id, value]) => ({ id, ...value }));
 }
 
