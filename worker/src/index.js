@@ -42,6 +42,7 @@ import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js
 import { handleDisplay, releaseByAdmin } from './display.js';
 import { saveActivity, getActivity } from './activity.js';
 import { updateRestraints, readRestraints } from './restraint.js';
+import { todoEntries } from '../../shared/gacha-todo.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
@@ -182,6 +183,19 @@ export async function processGift(db, envName, fields, source, nowMs = Date.now(
       const item = { ...built.item, source, receivedAt: { '.sv': 'timestamp' } };
       try {
         const { name } = await db.post(`envs/${envName}/queue`, item);
+        // 同じ抽選結果が何度出ても、抽選1回につき別のIDを持つ。
+        // キューのpush key + 抽選順indexなので時系列も維持できる。
+        const todos = todoEntries(name, built.item);
+        if (Object.keys(todos).length) {
+          try {
+            await db.patch(`envs/${envName}/state/gachaTodo/pending`, todos);
+          } catch (error) {
+            // タスクの記録失敗時に抽選だけ成功扱いにしない。
+            // キューを取り消して、Webhookの再送時にやり直せるようにする。
+            await db.remove(`envs/${envName}/queue/${name}`).catch(() => {});
+            throw error;
+          }
+        }
         result = { status: 'queued', key: name, rolls: built.item.rolls.map((r) => r.label) };
       } catch (err) {
         await mark.undo().catch(() => {});
@@ -255,6 +269,23 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
   if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+
+  if (path === '/admin/gacha-todo') {
+    const body = await request.json().catch(() => ({}));
+    const pendingPath = `envs/${envName}/state/gachaTodo/pending`;
+    if (body.type === 'read') return reply(cors, 200, { ok: true, pending: (await db.get(pendingPath)) || {} });
+    if (body.type === 'finish') {
+      const id = String(body.id || '');
+      if (!/^-[A-Za-z0-9_-]{8,40}_[0-9]{3}$/.test(id)) return reply(cors, 400, { error: 'タスクIDが不正です' });
+      await db.remove(`${pendingPath}/${id}`);
+      return reply(cors, 200, { ok: true });
+    }
+    if (body.type === 'reset-all') {
+      await db.remove(pendingPath);
+      return reply(cors, 200, { ok: true });
+    }
+    return reply(cors, 400, { error: 'タスク操作が不正です' });
+  }
 
   if (path === '/admin/restraints') {
     const body = await request.json().catch(() => ({}));

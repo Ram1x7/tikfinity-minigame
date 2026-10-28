@@ -1,3 +1,4 @@
+import { todoSorted } from '../shared/gacha-todo.js';
 import { advanceTimers } from '../shared/restraint-timers.js';
 // ============================================================
 // js/admin.js  管理画面
@@ -6,8 +7,8 @@ import { advanceTimers } from '../shared/restraint-timers.js';
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
 import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
-import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints } from './api.js';
+import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints, watchGachaTodo } from './store.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
 import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
@@ -158,6 +159,37 @@ $('player-release').addEventListener('click', async () => {
   }
 });
 
+
+// ---------------- ギフトガチャのやることリスト ----------------
+let todoSnapshot = {};
+let todoBusy = false;
+async function todoAction(body) {
+  if (todoBusy) return;
+  todoBusy = true;
+  try { await controlGachaTodo(env, body); }
+  catch (err) { toast(err.message, true); }
+  finally { todoBusy = false; }
+}
+function renderGachaTodo() {
+  const tasks = todoSorted(todoSnapshot);
+  $('gacha-todo-count').textContent = `残り${tasks.length}件`;
+  const list = $('gacha-todo-list');
+  list.replaceChildren(...tasks.slice(0, 5).map((task, index) =>
+    h('div', { class: 'item' },
+      h('div', { class: 'item__row' },
+        h('strong', {}, `${index + 1}. ${task.label}`),
+        h('button', { class: 'btn btn--small btn--primary', onclick: () => todoAction({ type: 'finish', id: task.id }) }, '完了')),
+      h('p', { class: 'hint' }, `${task.sender || '視聴者'}｜${task.giftName || 'ギフト'}`))
+  ));
+  if (tasks.length > 5) list.append(h('p', { class: 'hint' }, `さらに${tasks.length - 5}件が順番待ちです`));
+  if (tasks.length === 0) list.append(h('p', { class: 'hint' }, '未完了のガチャはありません'));
+}
+$('gacha-todo-reset').addEventListener('click', () => {
+  if (confirm('ギフトガチャの未完了リストをすべて削除します。元に戻せません。実行しますか？')) {
+    todoAction({ type: 'reset-all' });
+  }
+});
+watchGachaTodo(env, (value) => { todoSnapshot = value; renderGachaTodo(); });
 
 // ---------------- 縛りタイマー管理 ----------------
 let restraintSnapshot = null;

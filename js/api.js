@@ -68,6 +68,7 @@ async function call(path, body) {
   return data;
 }
 
+export const controlGachaTodo = (env, body) => call(`/admin/gacha-todo?env=${env}`, body);
 export const readRestraints = (env) => call(`/admin/restraints?env=${env}`, { type: 'read' });
 export const controlRestraints = (env, body) => call(`/admin/restraints?env=${env}`, body);
 export const saveConfig = (env, config) => call(`/admin/config?env=${env}`, config);

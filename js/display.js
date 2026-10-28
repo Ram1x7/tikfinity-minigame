@@ -1,3 +1,4 @@
+import { todoSorted } from '../shared/gacha-todo.js';
 // ============================================================
 // js/display.js  表示画面(PRISM LIVE に重ねるページ)
 // ------------------------------------------------------------
@@ -68,6 +69,26 @@ const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
 const debugEl = document.getElementById('debug');
 const restraintEl = document.getElementById('restraint-overlay');
+const gachaTodoEl = document.getElementById('gacha-todo-overlay');
+function renderGachaTodo(pending) {
+  if (!gachaTodoEl || preview || demo) return;
+  const tasks = todoSorted(pending);
+  gachaTodoEl.hidden = tasks.length === 0;
+  if (!tasks.length) { gachaTodoEl.replaceChildren(); return; }
+  const heading = document.createElement('div'); heading.className = 'gacha-todo-heading';
+  const title = document.createElement('strong'); title.textContent = 'ガチャ｜やること';
+  const count = document.createElement('span'); count.textContent = `残り${tasks.length}件`;
+  heading.append(title, count);
+  const list = document.createElement('ol'); list.className = 'gacha-todo-items';
+  for (const task of tasks.slice(0, 5)) {
+    const li = document.createElement('li');
+    li.textContent = task.label;
+    li.title = task.label;
+    list.append(li);
+  }
+  gachaTodoEl.replaceChildren(heading, list);
+}
+
 let restraintState = null;
 function renderRestraintOverlay() {
   if (!restraintEl) return;
@@ -447,6 +468,10 @@ function isStale(item) {
 async function drain() {
   if (playing) return;
   playing = true;
+  // ガチャ・ルーレットの演出中は両オーバーレイを一時的に隠す。
+  // DOM/Firebaseの状態は維持するため、タイマーの時間経過や未完了リストは止まらない。
+  stage.classList.add('is-playing');
+  try {
   while (queue.length > 0) {
     // 再生担当が Worker と通信できていないあいだは、新しい再生を始めない(二重再生を避ける)
     while (player && player.active && !player.canPlay()) await sleep(1000);
@@ -468,8 +493,11 @@ async function drain() {
     // 失敗しても先に進む(同じ項目で止まり続けないように)。保存は裏でやり直し続ける
     if (player) player.saveCursor(key);
   }
-  eventEl.classList.remove('show');
-  playing = false;
+  } finally {
+    eventEl.classList.remove('show');
+    stage.classList.remove('is-playing');
+    playing = false;
+  }
 }
 
 // ---------------- 見本の繰り返し再生(demo) ----------------
@@ -530,6 +558,7 @@ async function start() {
   watchConnection((ok) => setStatus('firebase', ok ? '' : 'Firebase に接続できません'));
   watchConfig(env, (config) => { settings = { staleMinutes: 10, ...config.settings }; });
   if (!preview) store.watchRestraints(env, (value) => { restraintState = value; renderRestraintOverlay(); });
+  if (!preview) store.watchGachaTodo(env, renderGachaTodo);
 
   const follow = (cursor) => {
     const seen = new Set();
