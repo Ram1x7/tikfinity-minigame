@@ -525,3 +525,21 @@ body {
   padding:5px 24px; color:#f6e8cb; font-size:23px;
   background:rgba(13,22,44,.85); border:2px solid #c9a66e; border-radius:12px;
 }
+
+/* タイマー枠内の固定レイアウト。旧スタイルや既定の余白に影響されないよう明示する。 */
+#restraint-overlay .restraint-row { overflow: hidden; }
+#restraint-overlay .restraint-top {
+  box-sizing: border-box; position: absolute; inset: 18px 55px auto 72px;
+  height: 42px; margin: 0; padding: 0;
+}
+#restraint-overlay .restraint-bottom {
+  box-sizing: border-box; position: absolute; inset: 69px 55px auto 72px;
+  height: 34px; margin: 0; padding: 0;
+  display: flex; align-items: center; gap: 12px;
+}
+#restraint-overlay .restraint-progress { margin: 0; min-width: 0; max-width: 100%; }
+#restraint-overlay .restraint-clock {
+  box-sizing: border-box; margin: 0; padding: 0;
+  flex: 0 0 112px; min-width: 112px; line-height: 34px;
+  font-size: 29px; white-space: nowrap;
+}
