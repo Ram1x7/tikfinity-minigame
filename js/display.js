@@ -1,3 +1,4 @@
+import { todoSorted } from '../shared/gacha-todo.js';
 // ============================================================
 // js/display.js  表示画面(PRISM LIVE に重ねるページ)
 // ------------------------------------------------------------
@@ -68,6 +69,26 @@ const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
 const debugEl = document.getElementById('debug');
 const restraintEl = document.getElementById('restraint-overlay');
+const gachaTodoEl = document.getElementById('gacha-todo-overlay');
+function renderGachaTodo(pending) {
+  if (!gachaTodoEl || preview || demo) return;
+  const tasks = todoSorted(pending);
+  gachaTodoEl.hidden = tasks.length === 0;
+  if (!tasks.length) { gachaTodoEl.replaceChildren(); return; }
+  const heading = document.createElement('div'); heading.className = 'gacha-todo-heading';
+  const title = document.createElement('strong'); title.textContent = 'ガチャ｜やること';
+  const count = document.createElement('span'); count.textContent = `残り${tasks.length}件`;
+  heading.append(title, count);
+  const list = document.createElement('ol'); list.className = 'gacha-todo-items';
+  for (const task of tasks.slice(0, 5)) {
+    const li = document.createElement('li');
+    li.textContent = task.label;
+    li.title = task.label;
+    list.append(li);
+  }
+  gachaTodoEl.replaceChildren(heading, list);
+}
+
 let restraintState = null;
 function renderRestraintOverlay() {
   if (!restraintEl) return;
@@ -530,6 +551,7 @@ async function start() {
   watchConnection((ok) => setStatus('firebase', ok ? '' : 'Firebase に接続できません'));
   watchConfig(env, (config) => { settings = { staleMinutes: 10, ...config.settings }; });
   if (!preview) store.watchRestraints(env, (value) => { restraintState = value; renderRestraintOverlay(); });
+  if (!preview) store.watchGachaTodo(env, renderGachaTodo);
 
   const follow = (cursor) => {
     const seen = new Set();
