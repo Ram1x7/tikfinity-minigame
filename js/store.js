@@ -110,3 +110,8 @@ export function watchOverlayEventsAfter(env, cursor, onItem) {
 export function watchRestraints(env, onChange) {
   return onValue(envRef(env, 'state/restraints'), (snap) => onChange(snap.val() || null));
 }
+
+/** ガチャ当選の未完了タスク。表示・管理画面は読み取りのみ。 */
+export function watchGachaTodo(env, onChange) {
+  return onValue(envRef(env, 'todo/pending'), (snap) => onChange(snap.val() || {}));
+}
