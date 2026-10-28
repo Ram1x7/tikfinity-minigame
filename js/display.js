@@ -468,6 +468,10 @@ function isStale(item) {
 async function drain() {
   if (playing) return;
   playing = true;
+  // ガチャ・ルーレットの演出中は両オーバーレイを一時的に隠す。
+  // DOM/Firebaseの状態は維持するため、タイマーの時間経過や未完了リストは止まらない。
+  stage.classList.add('is-playing');
+  try {
   while (queue.length > 0) {
     // 再生担当が Worker と通信できていないあいだは、新しい再生を始めない(二重再生を避ける)
     while (player && player.active && !player.canPlay()) await sleep(1000);
@@ -489,8 +493,11 @@ async function drain() {
     // 失敗しても先に進む(同じ項目で止まり続けないように)。保存は裏でやり直し続ける
     if (player) player.saveCursor(key);
   }
-  eventEl.classList.remove('show');
-  playing = false;
+  } finally {
+    eventEl.classList.remove('show');
+    stage.classList.remove('is-playing');
+    playing = false;
+  }
 }
 
 // ---------------- 見本の繰り返し再生(demo) ----------------
