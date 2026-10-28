@@ -171,6 +171,11 @@ async function restraintAction(body) {
 }
 $('restraint-pause').addEventListener('click', () => restraintAction({ type: 'pause-all' }));
 $('restraint-resume').addEventListener('click', () => restraintAction({ type: 'resume-all' }));
+$('restraint-reset').addEventListener('click', () => {
+  if (confirm('実行中・待機中の縛りタイマーをすべて削除します。元には戻せません。リセットしますか？')) {
+    restraintAction({ type: 'reset-all' });
+  }
+});
 function renderRestraints() {
   const s = restraintSnapshot;
   $('restraint-status').textContent = !s ? 'タイマー未開始（初回は全再開してください）'
