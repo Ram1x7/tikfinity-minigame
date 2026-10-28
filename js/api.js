@@ -68,6 +68,8 @@ async function call(path, body) {
   return data;
 }
 
+export const readRestraints = (env) => call(`/admin/restraints?env=${env}`, { type: 'read' });
+export const controlRestraints = (env, body) => call(`/admin/restraints?env=${env}`, body);
 export const saveConfig = (env, config) => call(`/admin/config?env=${env}`, config);
 export const sendTestGift = (env, gift) => call(`/admin/test-gift?env=${env}`, gift);
 export const clearEnv = (env) => call(`/admin/clear?env=${env}`);

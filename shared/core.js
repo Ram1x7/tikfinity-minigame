@@ -157,6 +157,21 @@ function sanitizeItem(it) {
     weight: Math.max(0, Math.min(1e6, Number(it.weight) || 0)),
     rarity: RARITIES.includes(it.rarity) ? it.rarity : 'N',
     color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : '',
+    // 空欄なら従来どおりタイマーなし。IDは重複当選の加算キー。
+    timer: sanitizeTimer(it.timer),
+  };
+}
+
+function sanitizeTimer(input) {
+  if (!input || input.enabled === false || (input.enabled !== true && input.durationMs === undefined)) return null;
+  const id = str(input.id, 100);
+  const minutes = Number(input.minutes ?? (Number(input.durationMs) / 60000));
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id) ||
+      !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) return null;
+  return {
+    id,
+    durationMs: Math.round(minutes * 60000),
+    group: input.group === 'parallel' ? 'parallel' : 'exclusive',
   };
 }
 
@@ -178,6 +193,11 @@ export function sanitizeConfig(input) {
       .map(sanitizeItem)
       .filter((it) => it.label);
     if (activeItems({ items }).length === 0) errors.push(`テーブル「${id}」に当選確率が0より大きい候補がありません`);
+    (Array.isArray(t?.items) ? t.items : []).slice(0, LIMITS.itemsPerTable).forEach((raw, index) => {
+      if (raw?.timer?.enabled === true && !sanitizeTimer(raw.timer)) {
+        errors.push(`テーブル「${id}」の候補${index + 1}: タイマーIDは英数字・_・-、時間は1秒〜1440分にしてください`);
+      }
+    });
     tables[id] = { title: str(t && t.title, LIMITS.title) || id, items };
   }
 
@@ -232,7 +252,7 @@ export function buildQueueItem(gift, config, rand = secureRandom) {
   const rolls = [];
   for (let i = 0; i < count; i++) {
     const it = weightedPick(items, rand);
-    rolls.push({ label: it.label, rarity: it.rarity || 'N', color: it.color || '' });
+    rolls.push({ label: it.label, rarity: it.rarity || 'N', color: it.color || '', ...(it.timer ? { timer: { ...it.timer, label: it.label } } : {}) });
   }
 
   return {

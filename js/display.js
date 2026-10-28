@@ -31,6 +31,7 @@ import { loadTheme, fitText, themeRarityColor } from './theme.js';
 import { parseLayout, fitPanel, textBoost } from './layout.js';
 import { rarityColor, sleep } from './visual.js';
 import { createPlayer, playerParams } from './player.js';
+import { advanceTimers } from '../shared/restraint-timers.js';
 
 // Firebase(js/store.js)は demo のときは読み込まない(接続できない環境でも見本を表示できるように)
 let store = null;
@@ -42,6 +43,8 @@ const speed = Math.min(5, Math.max(0.2, Number(params.get('speed')) || 1));
 const preview = params.get('preview') === '1';
 const demoParam = params.get('demo');
 const demo = ['1', 'gacha', 'roulette'].includes(demoParam) ? demoParam : null;
+// &timerDemo=1 は demo=... と併用する場合だけ有効。本番のデータには触れない。
+const timerDemo = Boolean(demo) && params.get('timerDemo') === '1';
 const guide = params.get('guide') === '1';
 const debug = params.get('debug') === '1' || (demo && !guide);
 // 配信用に大きく縮小される時、細い線が飛び飛びに拾われて文字が崩れるのを防ぐための、ごく軽いぼかし
@@ -64,6 +67,67 @@ const resultsEl = document.getElementById('ev-results');
 const pendingEl = document.getElementById('pending');
 const noticeEl = document.getElementById('notice');
 const debugEl = document.getElementById('debug');
+const restraintEl = document.getElementById('restraint-overlay');
+let restraintState = null;
+function renderRestraintOverlay() {
+  if (!restraintEl) return;
+  if (!restraintState || (demo && !timerDemo) || preview) { restraintEl.hidden = true; return; }
+  const current = advanceTimers(restraintState, Date.now());
+  const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
+  restraintEl.hidden = entries.length === 0;
+  const cards = entries.slice(0, 4).map((x) => {
+    const remaining = Math.max(0, Number(x.remainingMs || 0));
+    const secs = Math.ceil(remaining / 1000);
+    const row = document.createElement('div');
+    row.className = 'restraint-row' +
+      (x.status === 'waiting' ? ' waiting' : x.group === 'parallel' ? ' parallel' : '') +
+      (current.paused ? ' paused' : '');
+    const top = document.createElement('div'); top.className = 'restraint-top';
+    const label = document.createElement('div');
+    label.className = 'restraint-label'; label.textContent = x.label;
+    const status = document.createElement('span'); status.className = 'restraint-state';
+    status.textContent = current.paused ? '停止中' : x.status === 'waiting' ? '待機中' : x.group === 'parallel' ? '並行中' : '実行中';
+    top.append(label, status);
+    const bottom = document.createElement('div'); bottom.className = 'restraint-bottom';
+    const bar = document.createElement('div'); bar.className = 'restraint-progress';
+    const fill = document.createElement('span'); fill.className = 'restraint-progress-fill';
+    const initial = Math.max(1, Number(x.totalMs || x.remainingMs || 1));
+    fill.style.width = Math.max(0, Math.min(100, remaining / initial * 100)) + '%';
+    bar.append(fill);
+    const clock = document.createElement('span'); clock.className = 'restraint-clock';
+    clock.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+    bottom.append(bar, clock); row.append(top, bottom); return row;
+  });
+  if (entries.length > 4) {
+    const more = document.createElement('div'); more.className = 'restraint-more';
+    more.textContent = `ほか ${entries.length - 4} 件の縛り`;
+    cards.push(more);
+  }
+  restraintEl.replaceChildren(...cards);
+}
+// 描画確認用。疑似タイマーはローカルだけで進み、Worker/Firebaseには送信しない。
+if (timerDemo) {
+  const now = Date.now();
+  restraintState = {
+    paused: false, updatedAt: now,
+    entries: [
+      { id: 'fish-demo', label: '釣り縛り', group: 'exclusive', status: 'active', remainingMs: 9 * 60000 + 42000, totalMs: 10 * 60000 },
+      { id: 'bug-demo', label: '虫捕り縛り', group: 'exclusive', status: 'waiting', remainingMs: 10 * 60000, totalMs: 10 * 60000 },
+      { id: 'jump-demo', label: 'ジャンプ禁止', group: 'parallel', status: 'active', remainingMs: 4 * 60000 + 30000, totalMs: 5 * 60000 },
+    ],
+  };
+  renderRestraintOverlay();
+}
+setInterval(renderRestraintOverlay, 1000);
+async function awardRestraint(key, index) {
+  if (!player || !player.active || !player.canPlay()) throw new Error('再生担当の接続が切れています');
+  const p = playerParams(params);
+  const url = new URL(p.workerUrl + '/display/restraints?env=' + env);
+  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dk: p.displayKey, type: 'award', key, index }) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || '縛りタイマーの登録に失敗しました');
+}
 
 function notice(text) {
   noticeEl.hidden = !text;
@@ -311,7 +375,7 @@ function showSender(name) {
   }
 }
 
-async function playItem(item) {
+async function playItem(item, key) {
   const rolls = Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {});
   const pool = Array.isArray(item.pool) ? item.pool : Object.values(item.pool || {});
   if (rolls.length === 0) return;
@@ -360,6 +424,10 @@ async function playItem(item) {
         onCard: () => { if (theme.resultCard) eventEl.classList.add('event--card'); },
       });
     } else await playGacha(playEl, rolls[i], { speed });
+    if (mode === 'roulette' && rolls[i].timer && key && !preview && !demo) {
+      // 失敗した場合は再生位置を進めない。再試行時もWorker側のイベントIDで二重加算を防ぐ。
+      await awardRestraint(key, i);
+    }
     addChip(rolls[i], { inCard: eventEl.classList.contains('event--card') });
     await sleep(RESULT_HOLD_MS);
     if (i < rolls.length - 1) await sleep(ROLL_GAP_MS);
@@ -386,9 +454,16 @@ async function drain() {
     const { key, item } = queue.shift();
     updatePending();
     try {
-      if (!isStale(item)) await playItem(item);
+      if (!isStale(item)) await playItem(item, key);
     } catch (err) {
       console.error('再生に失敗しました', err);
+      // タイマー付き結果を取りこぼさないよう、失敗した抽選は再試行する。
+      if (item?.mode === 'roulette' && (Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {})).some((r) => r.timer)) {
+        queue.unshift({ key, item });
+        updatePending();
+        await sleep(5000);
+        continue;
+      }
     }
     // 失敗しても先に進む(同じ項目で止まり続けないように)。保存は裏でやり直し続ける
     if (player) player.saveCursor(key);
@@ -454,6 +529,7 @@ async function start() {
 
   watchConnection((ok) => setStatus('firebase', ok ? '' : 'Firebase に接続できません'));
   watchConfig(env, (config) => { settings = { staleMinutes: 10, ...config.settings }; });
+  if (!preview) store.watchRestraints(env, (value) => { restraintState = value; renderRestraintOverlay(); });
 
   const follow = (cursor) => {
     const seen = new Set();

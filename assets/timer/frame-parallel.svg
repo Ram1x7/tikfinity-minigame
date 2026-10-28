@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 154" width="760" height="154">
+<defs><linearGradient id="gold" x2="1" y2="1"><stop stop-color="#fff0b0"/><stop offset=".34" stop-color="#c89aff"/><stop offset=".6" stop-color="#a77b3c"/><stop offset="1" stop-color="#f7e4a0"/></linearGradient><linearGradient id="bg" x2="0" y2="1"><stop stop-color="#0c1632"/><stop offset="1" stop-color="#201136"/></linearGradient><pattern id="wave" width="48" height="24" patternUnits="userSpaceOnUse"><path d="M-24 23 Q0 -16 24 23 M0 23 Q24 -16 48 23 M24 23 Q48 -16 72 23" fill="none" stroke="#27436b" stroke-opacity=".36" stroke-width="2"/></pattern><g id="flower"><circle r="11" fill="#e8bd73"/><g fill="#fff2d7" stroke="#d9b576" stroke-width="1"><ellipse cy="-9" rx="6" ry="12"/><ellipse cy="-9" rx="6" ry="12" transform="rotate(72)"/><ellipse cy="-9" rx="6" ry="12" transform="rotate(144)"/><ellipse cy="-9" rx="6" ry="12" transform="rotate(216)"/><ellipse cy="-9" rx="6" ry="12" transform="rotate(288)"/></g><circle r="5" fill="#f5d081"/></g><g id="blueflower"><use href="#flower"/><circle r="11" fill="#283e95"/><g fill="#5b75d6" stroke="#d8b875" stroke-width=".8"><ellipse cy="-9" rx="5" ry="10"/><ellipse cy="-9" rx="5" ry="10" transform="rotate(72)"/><ellipse cy="-9" rx="5" ry="10" transform="rotate(144)"/><ellipse cy="-9" rx="5" ry="10" transform="rotate(216)"/><ellipse cy="-9" rx="5" ry="10" transform="rotate(288)"/></g><circle r="4" fill="#f2d08b"/></g></defs>
+<rect x="14" y="15" width="732" height="124" rx="18" fill="url(#bg)" fill-opacity=".96"/>
+<rect x="18" y="18" width="724" height="118" rx="15" fill="url(#wave)"/>
+<rect x="15" y="15" width="730" height="124" rx="16" fill="none" stroke="#1b244a" stroke-width="9"/>
+<rect x="17" y="17" width="726" height="120" rx="16" fill="none" stroke="url(#gold)" stroke-width="4"/>
+<rect x="24" y="24" width="712" height="106" rx="12" fill="none" stroke="#e5bc71" stroke-opacity=".55" stroke-width="1"/>
+<path d="M62 22 H235 Q256 26 272 19 H490 M65 132 H225 Q245 124 262 134 H511" stroke="url(#gold)" stroke-width="3" fill="none" stroke-linecap="round"/>
+<path d="M295 27 Q354 43 411 25 Q455 12 510 28 M290 129 Q357 117 419 133 Q478 145 540 128" stroke="#d6a04c" stroke-width="2" opacity=".52" fill="none"/>
+<path d="M31 49 Q73 69 40 94 M728 40 Q687 66 726 100" fill="none" stroke="url(#gold)" stroke-width="2"/>
+<use href="#flower" x="35" y="32" transform="rotate(-18 35 32)"/><use href="#blueflower" x="65" y="37"/><use href="#flower" x="51" y="121"/><use href="#blueflower" x="24" y="111"/><use href="#flower" x="725" y="119"/><use href="#blueflower" x="709" y="35"/><use href="#flower" x="737" y="54"/>
+<path d="M25 45 Q8 53 22 63 Q38 69 31 83" stroke="#f4d7a2" stroke-width="2" fill="none"/>
+</svg>

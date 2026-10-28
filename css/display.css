@@ -464,3 +464,55 @@ body {
   clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
   opacity: 0;
 }
+
+/* 縛りタイマー：文字・時間はリアルタイム描画、装飾のみ画像 */
+#restraint-overlay {
+  position: absolute; top: 1190px; left: 54px; width: 650px;
+  z-index: 20; display: flex; flex-direction: column; gap: 9px;
+  font-family: 'Zen Maru Gothic', 'Hiragino Sans', sans-serif;
+  pointer-events: none;
+}
+#restraint-overlay[hidden] { display: none; }
+.restraint-row {
+  box-sizing: border-box; position: relative; width: 650px; height: 132px;
+  background: url('../assets/timer/frame-active.svg') center / 100% 100% no-repeat;
+  color: #fff3dc; padding: 22px 35px 17px 78px;
+  text-shadow: 1px 2px 2px #020714;
+}
+.restraint-row.waiting {
+  background-image: url('../assets/timer/frame-waiting.svg'); color: #e1e9ff;
+}
+.restraint-row.parallel {
+  background-image: url('../assets/timer/frame-parallel.svg'); color: #f4e6ff;
+}
+.restraint-row.paused { filter: saturate(.65); }
+.restraint-top { display:flex; align-items:center; gap: 12px; min-width:0; }
+.restraint-label {
+  flex:1; min-width:0; font-size: 27px; line-height:1.3; font-weight: 900;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.restraint-state {
+  flex:none; border: 1px solid #d9bb7c; border-radius: 8px;
+  background: #111d3a; padding: 2px 8px; font-size: 16px; font-weight:800;
+}
+.restraint-bottom { display:flex; align-items:center; gap:14px; margin-top:8px; }
+.restraint-progress {
+  flex:1; height:13px; border-radius:10px; border:2px solid #b99050;
+  background:#080d20; overflow:hidden;
+}
+.restraint-progress-fill {
+  display:block; height:100%; border-radius:8px;
+  background:linear-gradient(90deg,#bd8537,#fff0a6); width:0%;
+}
+.waiting .restraint-progress-fill { background:linear-gradient(90deg,#8294b8,#e7efff); }
+.parallel .restraint-progress-fill { background:linear-gradient(90deg,#9563cc,#f4c8ff); }
+.restraint-clock {
+  flex:none; min-width:115px; text-align:right; font-size:31px; font-weight:900;
+  color:#ffe3a0; font-variant-numeric:tabular-nums;
+}
+.waiting .restraint-clock { color:#e5e8ff; }
+.parallel .restraint-clock { color:#f4d1ff; }
+.restraint-more {
+  padding:5px 24px; color:#f6e8cb; font-size:23px;
+  background:rgba(13,22,44,.85); border:2px solid #c9a66e; border-radius:12px;
+}

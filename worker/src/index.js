@@ -41,6 +41,7 @@ import { createDb } from './firebase.js';
 import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
 import { handleDisplay, releaseByAdmin } from './display.js';
 import { saveActivity, getActivity } from './activity.js';
+import { updateRestraints, readRestraints } from './restraint.js';
 
 const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
@@ -255,6 +256,16 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
   if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
 
+  if (path === '/admin/restraints') {
+    const body = await request.json().catch(() => ({}));
+    if (body.type === 'read') return reply(cors, 200, { ok: true, state: await readRestraints(db, envName) });
+    if (!['pause-all', 'resume-all', 'finish', 'adjust'].includes(body.type)) {
+      return reply(cors, 400, { error: 'タイマー操作が不正です' });
+    }
+    const result = await updateRestraints(db, envName, body);
+    return reply(cors, 200, { ok: true, ...result });
+  }
+
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
     const { config, errors } = sanitizeConfig(body);
@@ -343,6 +354,28 @@ export default {
         return reply(cors, 200, result);
       }
 
+      if (url.pathname === '/display/restraints') {
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'env が不正です' });
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+        const body = await request.json().catch(() => ({}));
+        const keyName = envName === 'prod' ? 'DISPLAY_KEY_PROD' : 'DISPLAY_KEY_TEST';
+        if (!env[keyName] || !safeEqual(body.dk, env[keyName])) return reply(cors, 401, { error: '表示用の合言葉が違います' });
+        if (body.type === 'read') return reply(cors, 200, { ok: true, state: await readRestraints(db, envName) });
+        if (body.type !== 'award') return reply(cors, 400, { error: '操作が不正です' });
+        // 結果の偽装を防ぐため、必ず保存済みキューから照合する。
+        const key = String(body.key || '');
+        const index = Number(body.index);
+        if (!/^-[A-Za-z0-9_-]{8,40}$/.test(key) || !Number.isInteger(index) || index < 0 || index > 99) {
+          return reply(cors, 400, { error: '抽選結果の指定が不正です' });
+        }
+        const queued = await db.get(`envs/${envName}/queue/${key}`);
+        const rolls = queued && (Array.isArray(queued.rolls) ? queued.rolls : Object.values(queued.rolls || {}));
+        const roll = rolls && rolls[index];
+        if (!roll?.timer || queued.mode !== 'roulette') return reply(cors, 400, { error: 'タイマー対象の抽選結果ではありません' });
+        const result = await updateRestraints(db, envName, { type: 'award', eventId: `${key}:${index}`, rule: roll.timer });
+        return reply(cors, 200, { ok: true, ...result });
+      }
       if (url.pathname.startsWith('/display/')) {
         return await handleDisplay(request, env, db, url, cors);
       }
