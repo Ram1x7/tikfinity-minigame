@@ -76,7 +76,7 @@ function renderGachaTodo(pending) {
   gachaTodoEl.hidden = tasks.length === 0;
   if (!tasks.length) { gachaTodoEl.replaceChildren(); return; }
   const heading = document.createElement('div'); heading.className = 'gacha-todo-heading';
-  const title = document.createElement('strong'); title.textContent = 'ガチャ｜やること';
+  const title = document.createElement('strong'); title.textContent = 'やること';
   const count = document.createElement('span'); count.textContent = `残り${tasks.length}件`;
   heading.append(title, count);
   const list = document.createElement('ol'); list.className = 'gacha-todo-items';
