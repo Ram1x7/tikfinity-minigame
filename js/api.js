@@ -68,6 +68,26 @@ async function call(path, body) {
   return data;
 }
 
+/** 管理用の合言葉で音声をR2に直接アップロードする。保存されたURLを返す。 */
+export async function uploadBgm(env, file) {
+  const { workerUrl, adminKey } = getConnection();
+  if (!workerUrl || !adminKey) throw new Error('先に管理画面の「接続設定」を保存してください');
+  const ext = String(file?.name || '').split('.').pop().toLowerCase();
+  if (!['mp3', 'm4a', 'ogg', 'wav'].includes(ext)) throw new Error('MP3/M4A/OGG/WAVのみアップロードできます');
+  if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('ファイルは10MB以下にしてください');
+  let res;
+  try {
+    res = await fetch(`${workerUrl}/admin/bgm/upload?env=${encodeURIComponent(env)}&ext=${ext}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Admin-Key': adminKey },
+      body: file,
+    });
+  } catch { throw new Error('Workerへアップロードできませんでした。接続設定を確認してください'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `アップロード失敗 (${res.status})`);
+  return data.url;
+}
+
 export const controlGachaTodo = (env, body) => call(`/admin/gacha-todo?env=${env}`, body);
 export const readRestraints = (env) => call(`/admin/restraints?env=${env}`, { type: 'read' });
 export const controlRestraints = (env, body) => call(`/admin/restraints?env=${env}`, body);

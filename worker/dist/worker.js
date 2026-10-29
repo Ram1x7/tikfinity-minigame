@@ -973,6 +973,8 @@ async function readRestraints(db, envName, now = Date.now()) {
 //   POST /admin/clear?env=         キュー・重複記録・受信ログ・再生位置を消去
 //   POST /admin/copy-config?from=test&to=prod   設定のコピー
 //   POST /admin/display/release?env=   表示画面の再生担当を外す(別の画面に切り替える)
+//   POST /admin/bgm/upload?env=   BGM音声ファイルをR2にアップロード
+//   GET  /bgm/{id}.mp3|m4a|ogg|wav   公開音声ファイルを配信
 //   (/admin/* は X-Admin-Key ヘッダーが必要)
 //   POST /display/claim|heartbeat|cursor|release?env=   表示画面の再生担当・再生位置(worker/src/display.js)
 //   (/display/* は表示用の合言葉 DISPLAY_KEY_PROD / DISPLAY_KEY_TEST が必要)
@@ -985,6 +987,7 @@ async function readRestraints(db, envName, now = Date.now()) {
 //   ADMIN_KEY         管理画面・テスト画面で使う合言葉
 //   DISPLAY_KEY_PROD  本番の表示画面(PRISM に設定する URL)に付ける合言葉
 //   DISPLAY_KEY_TEST  テストの表示画面に付ける合言葉(本番と別の値にする)
+//   BGM_BUCKET        R2バケットのバインディング（BGM音声保存用）
 //   ALLOWED_ORIGIN    (任意) 管理画面の公開元。例: https://ram1x7.github.io
 //   ALLOWED_ENVS      (任意) この Worker で使える環境。テスト専用の Worker では "test" にする。
 //                     一覧に無い環境(env=prod など)への要求は、Webhook・管理・表示のすべてで 403 にする
@@ -1250,6 +1253,30 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
     return reply(cors, 200, { ok: true, ...result });
   }
 
+  if (path === '/admin/bgm/upload') {
+    if (!env.BGM_BUCKET) return reply(cors, 503, { error: 'R2バケット BGM_BUCKET が未設定です。Cloudflareでバケットを作成しWorkerにバインドしてください' });
+    const maxBytes = 10 * 1024 * 1024;
+    const length = Number(request.headers.get('Content-Length') || 0);
+    if (length > maxBytes) return reply(cors, 413, { error: 'BGMは10MB以下にしてください' });
+    const ext = String(url.searchParams.get('ext') || '').toLowerCase();
+    const types = { mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', wav: 'audio/wav' };
+    if (!types[ext]) return reply(cors, 400, { error: 'MP3/M4A/OGG/WAVのみ対応しています' });
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (!bytes.length || bytes.length > maxBytes) return reply(cors, 413, { error: '音声ファイルは1バイト以上10MB以下にしてください' });
+    // 拡張子だけを偽装したファイルを拒否。
+    const ascii = (a, b) => String.fromCharCode(...bytes.slice(a, b));
+    const valid = ext === 'mp3'
+      ? (ascii(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0))
+      : ext === 'm4a' ? ascii(4, 8) === 'ftyp'
+      : ext === 'ogg' ? ascii(0, 4) === 'OggS'
+      : ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE';
+    if (!valid) return reply(cors, 400, { error: '音声ファイルの形式を確認してください（拡張子と内容が一致しません）' });
+    const id = crypto.randomUUID().replace(/-/g, '');
+    const key = `${envName}/${id}.${ext}`;
+    await env.BGM_BUCKET.put(key, bytes, { httpMetadata: { contentType: types[ext], cacheControl: 'public, max-age=86400' } });
+    return reply(cors, 200, { ok: true, url: `${url.origin}/bgm/${key}`, bytes: bytes.length });
+  }
+
   if (path === '/admin/config') {
     const body = await request.json().catch(() => null);
     const { config, errors } = sanitizeConfig(body);
@@ -1294,6 +1321,36 @@ export default {
         // この Worker で使える環境(null なら制限なし)
         allowedEnvs: allowedEnvs(env),
       });
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/bgm/')) {
+      if (!env.BGM_BUCKET) return reply(cors, 503, { error: 'BGM_BUCKET が未設定です' });
+      const key = url.pathname.slice('/bgm/'.length);
+      if (!/^(prod|test)\/[a-f0-9]{32}\.(mp3|m4a|ogg|wav)$/.test(key)) return reply(cors, 404, { error: 'not found' });
+      const envName = key.split('/')[0];
+      if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+      const rangeHeader = request.headers.get('Range');
+      const metadata = await env.BGM_BUCKET.head(key);
+      if (!metadata) return reply(cors, 404, { error: 'not found' });
+      let range;
+      if (rangeHeader) {
+        const match = /^bytes=(\\d*)-(\\d*)$/.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
+        let start = match[1] ? Number(match[1]) : Math.max(0, metadata.size - Number(match[2]));
+        let end = match[2] && match[1] ? Number(match[2]) : metadata.size - 1;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= metadata.size || end < start) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
+        end = Math.min(end, metadata.size - 1);
+        range = { offset: start, length: end - start + 1 };
+      }
+      const object = await env.BGM_BUCKET.get(key, range ? { range } : {});
+      if (!object) return reply(cors, 404, { error: 'not found' });
+      const headers = new Headers(cors);
+      object.writeHttpMetadata(headers);
+      headers.set('Accept-Ranges', 'bytes');
+      headers.set('Content-Length', String(range ? range.length : metadata.size));
+      if (range) headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
+      headers.set('Cache-Control', 'public, max-age=86400');
+      headers.set('X-Content-Type-Options', 'nosniff');
+      return new Response(object.body, { status: range ? 206 : 200, headers });
     }
     if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
 
