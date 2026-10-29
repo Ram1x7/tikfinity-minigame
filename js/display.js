@@ -121,7 +121,9 @@ function syncRestraintBgm(current) {
   if (current.paused) {
     restraintAudio.pause();
   } else if (restraintAudio.paused && !bgmPlayFailed) {
+    const attemptedUrl = bgmUrl;
     restraintAudio.play().catch((error) => {
+      if (attemptedUrl !== bgmUrl) return;
       bgmPlayFailed = true;
       console.warn('BGMの自動再生が許可されていません。PRISMのブラウザソースの音声設定を確認してください。', error);
     });
@@ -131,7 +133,11 @@ function syncRestraintBgm(current) {
 stage.addEventListener('pointerdown', () => { bgmPlayFailed = false; syncRestraintBgm(restraintState && advanceTimers(restraintState, Date.now())); });
 function renderRestraintOverlay() {
   if (!restraintEl) return;
-  if (!restraintState || (demo && !timerDemo) || preview) { restraintEl.hidden = true; return; }
+  if (!restraintState || (demo && !timerDemo) || preview) {
+    syncRestraintBgm(null);
+    restraintEl.hidden = true;
+    return;
+  }
   const current = advanceTimers(restraintState, Date.now());
   syncRestraintBgm(current);
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
