@@ -174,7 +174,7 @@ function sanitizeTimer(input) {
     durationMs: Math.round(minutes * 60000),
     group: input.group === 'parallel' ? 'parallel' : 'exclusive',
     // Direct audio URLs only; YouTube embeds cannot be used as hidden audio players.
-    bgmUrl: /^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(bgmUrl) ? bgmUrl : '',
+    ...(/^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(bgmUrl) ? { bgmUrl } : {}),
   };
 }
 
