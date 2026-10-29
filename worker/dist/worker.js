@@ -166,6 +166,27 @@ function sanitizeItem(it) {
   };
 }
 
+/** Official YouTube embed video ID; no downloading or extracting audio. */
+function youtubeVideoId(value) {
+  try {
+    const u = new URL(String(value || ''));
+    if (u.protocol !== 'https:') return '';
+    const host = u.hostname.toLowerCase();
+    let id = '';
+    if (host === 'youtu.be' || host === 'www.youtu.be') id = u.pathname.split('/')[1];
+    else if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      const parts = u.pathname.split('/').filter(Boolean);
+      id = parts[0] === 'watch' ? u.searchParams.get('v') : ['shorts', 'live', 'embed'].includes(parts[0]) ? parts[1] : '';
+    }
+    return /^[a-zA-Z0-9_-]{11}$/.test(id || '') ? id : '';
+  } catch { return ''; }
+}
+
+function supportedBgmUrl(value) {
+  const url = String(value || '').trim();
+  return /^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(url) || Boolean(youtubeVideoId(url));
+}
+
 function sanitizeTimer(input) {
   if (!input || input.enabled === false || (input.enabled !== true && input.durationMs === undefined)) return null;
   const id = str(input.id, 100);
@@ -177,8 +198,8 @@ function sanitizeTimer(input) {
     id,
     durationMs: Math.round(minutes * 60000),
     group: input.group === 'parallel' ? 'parallel' : 'exclusive',
-    // Direct audio URLs only; YouTube embeds cannot be used as hidden audio players.
-    ...(/^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(bgmUrl) ? { bgmUrl } : {}),
+    // YouTube URLs use a visible official embed player, never hidden audio extraction.
+    ...(supportedBgmUrl(bgmUrl) ? { bgmUrl } : {}),
   };
 }
 
@@ -205,7 +226,7 @@ function sanitizeConfig(input) {
         errors.push(`テーブル「${id}」の候補${index + 1}: タイマーIDは英数字・_・-、時間は1秒〜1440分にしてください`);
       }
       if (raw?.timer?.enabled === true && raw.timer.bgmUrl && !sanitizeTimer(raw.timer)?.bgmUrl) {
-        errors.push(`テーブル「${id}」の候補${index + 1}: BGMにはHTTPSの音声ファイルURL（mp3/m4a/ogg/wav）を指定してください`);
+        errors.push(`テーブル「${id}」の候補${index + 1}: BGMにはHTTPSの音声ファイルURLまたはYouTube動画URLを指定してください`);
       }
     });
     tables[id] = { title: str(t && t.title, LIMITS.title) || id, items };
