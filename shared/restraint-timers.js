@@ -58,17 +58,18 @@ export function awardTimer(state, rule, now) {
     throw new Error('縛りタイマーの設定が不正です');
   }
   const bgmUrl = typeof rule?.bgmUrl === 'string' ? rule.bgmUrl : '';
+  const bgmVolume = Math.max(0, Math.min(100, Number(rule?.bgmVolume ?? 50)));
   const existing = s.entries.find((x) => x.id === id && x.status !== 'done');
   if (existing) {
     const before = remaining(existing);
     existing.remainingMs = Math.min(MAX_REMAINING_MS, before + durationMs);
     existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || before) + durationMs);
-    if (bgmUrl) existing.bgmUrl = bgmUrl;
+    if (bgmUrl) { existing.bgmUrl = bgmUrl; existing.bgmVolume = bgmVolume; }
     return s;
   }
   const hasExclusive = s.entries.some((x) => active(x) && exclusive(x));
   s.entries.push({
-    id, label, group, bgmUrl, remainingMs: durationMs, totalMs: durationMs,
+    id, label, group, bgmUrl, bgmVolume, remainingMs: durationMs, totalMs: durationMs,
     startedAt: group === 'parallel' || !hasExclusive ? now : null,
     status: group === 'parallel' || !hasExclusive ? 'active' : 'waiting',
   });
