@@ -584,3 +584,8 @@ body {
 #stage.is-playing #restraint-overlay {
   display: none !important;
 }
+
+/* YouTubeは音声だけを隠して再生せず、公式プレーヤーを表示する */
+#timer-youtube-player { position:absolute; right:28px; top:1360px; width:320px; height:200px; z-index:21; background:#000; pointer-events:auto; }
+#timer-youtube-player[hidden] { display:none; }
+#timer-youtube-mount { width:320px; height:200px; }

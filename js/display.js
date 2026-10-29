@@ -1,4 +1,5 @@
 import { todoSorted } from '../shared/gacha-todo.js';
+import { createTimerBgmController } from './timer-bgm.js';
 // ============================================================
 // js/display.js  表示画面(PRISM LIVE に重ねるページ)
 // ------------------------------------------------------------
@@ -90,56 +91,16 @@ function renderGachaTodo(pending) {
 }
 
 let restraintState = null;
-// 縛りタイマー連動BGM。先に再生中の音源を優先し、終了したら次の実行中BGMへ。
-const restraintAudio = new Audio();
-restraintAudio.loop = true;
-restraintAudio.preload = 'none';
-let bgmEntryId = '';
-let bgmUrl = '';
-let bgmPlayFailed = false;
-function syncRestraintBgm(current) {
-  if (preview || demo) return;
-  const active = (current?.entries || []).filter((x) => x.status === 'active' && x.bgmUrl && x.remainingMs > 0);
-  const ongoing = active.find((x) => x.id === bgmEntryId && x.bgmUrl === bgmUrl);
-  const selected = ongoing || active.sort((a, b) => (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0))[0];
-  if (!selected) {
-    restraintAudio.pause();
-    restraintAudio.removeAttribute('src');
-    restraintAudio.load();
-    bgmEntryId = '';
-    bgmUrl = '';
-    bgmPlayFailed = false;
-    return;
-  }
-  if (selected.id !== bgmEntryId || selected.bgmUrl !== bgmUrl) {
-    restraintAudio.pause();
-    bgmEntryId = selected.id;
-    bgmUrl = selected.bgmUrl;
-    restraintAudio.src = bgmUrl;
-    bgmPlayFailed = false;
-  }
-  if (current.paused) {
-    restraintAudio.pause();
-  } else if (restraintAudio.paused && !bgmPlayFailed) {
-    const attemptedUrl = bgmUrl;
-    restraintAudio.play().catch((error) => {
-      if (attemptedUrl !== bgmUrl) return;
-      bgmPlayFailed = true;
-      console.warn('BGMの自動再生が許可されていません。PRISMのブラウザソースの音声設定を確認してください。', error);
-    });
-  }
-}
-// ブラウザがユーザー操作を要求する場合、表示画面を操作した時に再試行できるようにする。
-stage.addEventListener('pointerdown', () => { bgmPlayFailed = false; syncRestraintBgm(restraintState && advanceTimers(restraintState, Date.now())); });
+const timerBgm = createTimerBgmController(stage);
 function renderRestraintOverlay() {
   if (!restraintEl) return;
   if (!restraintState || (demo && !timerDemo) || preview) {
-    syncRestraintBgm(null);
+    timerBgm.sync(null);
     restraintEl.hidden = true;
     return;
   }
   const current = advanceTimers(restraintState, Date.now());
-  syncRestraintBgm(current);
+  timerBgm.sync(current);
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
   const cards = entries.slice(0, 4).map((x) => {

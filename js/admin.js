@@ -318,10 +318,10 @@ function renderTables() {
         h('label', { class: 'field' }, '同時実行',
           select([['exclusive', '専用行動（釣り・虫捕りなど）'], ['parallel', '並行可能（ジャンプ禁止など）']],
             timer.group || 'exclusive', (v) => { it.timer = { ...it.timer, group: v }; markDirty(); })),
-        h('label', { class: 'field' }, '実行中BGMの音声URL（任意・HTTPSのmp3/m4a/ogg/wav）',
-          h('input', { type: 'url', value: timer.bgmUrl || '', placeholder: 'https://example.com/music.mp3',
+        h('label', { class: 'field' }, '実行中BGMのURL（MP3など／YouTube動画）',
+          h('input', { type: 'url', value: timer.bgmUrl || '', placeholder: 'https://www.youtube.com/watch?v=... または https://example.com/music.mp3',
             oninput: (e) => { it.timer = { ...it.timer, bgmUrl: e.target.value }; markDirty(); } })),
-        h('p', { class: 'hint' }, '先に再生中のBGMを優先。タイマー停止中は一時停止します。YouTube動画URLは音声専用再生に利用できません。'));
+        h('p', { class: 'hint' }, '先に再生中のBGMを優先。タイマー停止中は一時停止します。YouTubeは配信画面に公式動画プレーヤーを表示します。iPadでは自動再生できない場合があります。'));
       timerControls.hidden = !timerEnabled;
       return h('div', { class: 'cand' },
         h('input', { class: 'cand__label', type: 'text', value: it.label || '', placeholder: '内容(例: 魚を3匹釣るまで他の行動禁止)', maxLength: LIMITS.label,
