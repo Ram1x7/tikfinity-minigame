@@ -172,10 +172,13 @@ function sanitizeTimer(input) {
   const minutes = Number(input.minutes ?? (Number(input.durationMs) / 60000));
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id) ||
       !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) return null;
+  const bgmUrl = str(input.bgmUrl, 600);
   return {
     id,
     durationMs: Math.round(minutes * 60000),
     group: input.group === 'parallel' ? 'parallel' : 'exclusive',
+    // Direct audio URLs only; YouTube embeds cannot be used as hidden audio players.
+    bgmUrl: /^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(bgmUrl) ? bgmUrl : '',
   };
 }
 
@@ -200,6 +203,9 @@ function sanitizeConfig(input) {
     (Array.isArray(t?.items) ? t.items : []).slice(0, LIMITS.itemsPerTable).forEach((raw, index) => {
       if (raw?.timer?.enabled === true && !sanitizeTimer(raw.timer)) {
         errors.push(`テーブル「${id}」の候補${index + 1}: タイマーIDは英数字・_・-、時間は1秒〜1440分にしてください`);
+      }
+      if (raw?.timer?.enabled === true && raw.timer.bgmUrl && !sanitizeTimer(raw.timer)?.bgmUrl) {
+        errors.push(`テーブル「${id}」の候補${index + 1}: BGMにはHTTPSの音声ファイルURL（mp3/m4a/ogg/wav）を指定してください`);
       }
     });
     tables[id] = { title: str(t && t.title, LIMITS.title) || id, items };
@@ -322,7 +328,7 @@ const remaining = (x) => Math.max(0, Number(x.remainingMs) || 0);
 function startNext(s) {
   if (s.entries.some((x) => active(x) && exclusive(x))) return;
   const next = s.entries.find((x) => x.status === 'waiting' && exclusive(x));
-  if (next) next.status = 'active';
+  if (next) { next.status = 'active'; next.startedAt = s.updatedAt; }
 }
 
 /** 時間経過を適用。途中で専用行動が終われば残りの経過時間を次の待機に引き継ぐ。 */
@@ -364,16 +370,19 @@ function awardTimer(state, rule, now) {
       durationMs < 1000 || durationMs > MAX_DURATION_MS) {
     throw new Error('縛りタイマーの設定が不正です');
   }
+  const bgmUrl = typeof rule?.bgmUrl === 'string' ? rule.bgmUrl : '';
   const existing = s.entries.find((x) => x.id === id && x.status !== 'done');
   if (existing) {
     const before = remaining(existing);
     existing.remainingMs = Math.min(MAX_REMAINING_MS, before + durationMs);
     existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || before) + durationMs);
+    if (bgmUrl) existing.bgmUrl = bgmUrl;
     return s;
   }
   const hasExclusive = s.entries.some((x) => active(x) && exclusive(x));
   s.entries.push({
-    id, label, group, remainingMs: durationMs, totalMs: durationMs,
+    id, label, group, bgmUrl, remainingMs: durationMs, totalMs: durationMs,
+    startedAt: group === 'parallel' || !hasExclusive ? now : null,
     status: group === 'parallel' || !hasExclusive ? 'active' : 'waiting',
   });
   return s;
