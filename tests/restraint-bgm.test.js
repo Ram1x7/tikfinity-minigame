@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeConfig, buildQueueItem, encodeKey } from '../shared/core.js';
+import { sanitizeConfig, buildQueueItem, encodeKey, youtubeVideoId } from '../shared/core.js';
 import { awardTimer, advanceTimers, controlTimers } from '../shared/restraint-timers.js';
 
 const url = 'https://example.com/workout.mp3';
@@ -18,12 +18,15 @@ test('縛りBGMは抽選結果からタイマー状態まで引き継がれる',
   assert.equal(state.entries[0].startedAt, 1000);
 });
 
-test('YouTube動画URLは音声BGMとして保存されない', () => {
+test('YouTube動画URLは公式埋め込み用BGMとして保存される', () => {
   const { config, errors } = sanitizeConfig({
-    tables: { t: { title: 'test', items: [{ label: '筋トレ', weight: 1, timer: { enabled: true, id: 'workout', minutes: 10, bgmUrl: 'https://www.youtube.com/watch?v=abc' } }] } },
+    tables: { t: { title: 'test', items: [{ label: '筋トレ', weight: 1, timer: { enabled: true, id: 'workout', minutes: 10, bgmUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } }] } },
   });
-  assert.ok(errors.some((e) => e.includes('BGM')));
-  assert.equal(config.tables.t.items[0].timer.bgmUrl, undefined);
+  assert.deepEqual(errors, []);
+  assert.equal(config.tables.t.items[0].timer.bgmUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(youtubeVideoId('https://youtu.be/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(youtubeVideoId('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(youtubeVideoId('https://evil.example/watch?v=dQw4w9WgXcQ'), '');
 });
 
 test('待機中の縛りは開始するまでBGMの開始時刻を持たない', () => {
