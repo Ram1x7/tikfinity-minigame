@@ -90,10 +90,50 @@ function renderGachaTodo(pending) {
 }
 
 let restraintState = null;
+// 縛りタイマー連動BGM。先に再生中の音源を優先し、終了したら次の実行中BGMへ。
+const restraintAudio = new Audio();
+restraintAudio.loop = true;
+restraintAudio.preload = 'none';
+let bgmEntryId = '';
+let bgmUrl = '';
+let bgmPlayFailed = false;
+function syncRestraintBgm(current) {
+  if (preview || demo) return;
+  const active = (current?.entries || []).filter((x) => x.status === 'active' && x.bgmUrl && x.remainingMs > 0);
+  const ongoing = active.find((x) => x.id === bgmEntryId && x.bgmUrl === bgmUrl);
+  const selected = ongoing || active.sort((a, b) => (Number(a.startedAt) || 0) - (Number(b.startedAt) || 0))[0];
+  if (!selected) {
+    restraintAudio.pause();
+    restraintAudio.removeAttribute('src');
+    restraintAudio.load();
+    bgmEntryId = '';
+    bgmUrl = '';
+    bgmPlayFailed = false;
+    return;
+  }
+  if (selected.id !== bgmEntryId || selected.bgmUrl !== bgmUrl) {
+    restraintAudio.pause();
+    bgmEntryId = selected.id;
+    bgmUrl = selected.bgmUrl;
+    restraintAudio.src = bgmUrl;
+    bgmPlayFailed = false;
+  }
+  if (current.paused) {
+    restraintAudio.pause();
+  } else if (restraintAudio.paused && !bgmPlayFailed) {
+    restraintAudio.play().catch((error) => {
+      bgmPlayFailed = true;
+      console.warn('BGMの自動再生が許可されていません。PRISMのブラウザソースの音声設定を確認してください。', error);
+    });
+  }
+}
+// ブラウザがユーザー操作を要求する場合、表示画面を操作した時に再試行できるようにする。
+stage.addEventListener('pointerdown', () => { bgmPlayFailed = false; syncRestraintBgm(restraintState && advanceTimers(restraintState, Date.now())); });
 function renderRestraintOverlay() {
   if (!restraintEl) return;
   if (!restraintState || (demo && !timerDemo) || preview) { restraintEl.hidden = true; return; }
   const current = advanceTimers(restraintState, Date.now());
+  syncRestraintBgm(current);
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
   const cards = entries.slice(0, 4).map((x) => {
