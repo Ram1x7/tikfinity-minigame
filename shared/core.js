@@ -168,10 +168,13 @@ function sanitizeTimer(input) {
   const minutes = Number(input.minutes ?? (Number(input.durationMs) / 60000));
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(id) ||
       !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) return null;
+  const bgmUrl = str(input.bgmUrl, 600);
   return {
     id,
     durationMs: Math.round(minutes * 60000),
     group: input.group === 'parallel' ? 'parallel' : 'exclusive',
+    // Direct audio URLs only; YouTube embeds cannot be used as hidden audio players.
+    ...(/^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(bgmUrl) ? { bgmUrl } : {}),
   };
 }
 
@@ -196,6 +199,9 @@ export function sanitizeConfig(input) {
     (Array.isArray(t?.items) ? t.items : []).slice(0, LIMITS.itemsPerTable).forEach((raw, index) => {
       if (raw?.timer?.enabled === true && !sanitizeTimer(raw.timer)) {
         errors.push(`テーブル「${id}」の候補${index + 1}: タイマーIDは英数字・_・-、時間は1秒〜1440分にしてください`);
+      }
+      if (raw?.timer?.enabled === true && raw.timer.bgmUrl && !sanitizeTimer(raw.timer)?.bgmUrl) {
+        errors.push(`テーブル「${id}」の候補${index + 1}: BGMにはHTTPSの音声ファイルURL（mp3/m4a/ogg/wav）を指定してください`);
       }
     });
     tables[id] = { title: str(t && t.title, LIMITS.title) || id, items };
