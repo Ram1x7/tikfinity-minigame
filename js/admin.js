@@ -8,7 +8,7 @@ import { advanceTimers } from '../shared/restraint-timers.js';
 // ============================================================
 import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
 import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints, watchGachaTodo } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo } from './api.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo, uploadBgm } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
 import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
@@ -321,10 +321,30 @@ function renderTables() {
         h('label', { class: 'field' }, '実行中BGMのURL（MP3など／YouTube動画）',
           h('input', { type: 'url', value: timer.bgmUrl || '', placeholder: 'https://www.youtube.com/watch?v=... または https://example.com/music.mp3',
             oninput: (e) => { it.timer = { ...it.timer, bgmUrl: e.target.value }; markDirty(); } })),
+        h('label', { class: 'field' }, 'MP3などをアップロード（10MB以下）',
+          h('input', { type: 'file', accept: '.mp3,.m4a,.ogg,.wav,audio/*',
+            onchange: async (e) => {
+              const input = e.target;
+              const file = input.files?.[0];
+              if (!file) return;
+              const hint = h('span', { class: 'hint' }, 'アップロード中…');
+              input.after(hint);
+              input.disabled = true;
+              try {
+                const uploadedUrl = await uploadBgm(env, file);
+                it.timer = { ...it.timer, bgmUrl: uploadedUrl };
+                markDirty();
+                toast('アップロード完了。最後に「保存」を押してください');
+                renderTables();
+              } catch (error) {
+                hint.textContent = 'アップロード失敗: ' + (error.message || error);
+                input.disabled = false;
+              }
+            } })),
         h('label', { class: 'field' }, 'BGM音量（0〜100%）',
           h('input', { type: 'number', min: 0, max: 100, step: 5, value: timer.bgmVolume ?? 50,
             oninput: (e) => { it.timer = { ...it.timer, bgmVolume: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }; markDirty(); } })),
-        h('p', { class: 'hint' }, '先に再生中のBGMを優先。タイマー停止中は一時停止します。YouTubeは配信画面に公式動画プレーヤーを表示します。iPadでは自動再生できない場合があります。'));
+        h('p', { class: 'hint' }, '先に再生中のBGMを優先。タイマー停止中は一時停止します。音声ファイルをアップロードした後は画面下の「保存」も押してください。YouTubeは公式動画プレーヤーを表示します。iPadでは自動再生できない場合があります。'));
       timerControls.hidden = !timerEnabled;
       return h('div', { class: 'cand' },
         h('input', { class: 'cand__label', type: 'text', value: it.label || '', placeholder: '内容(例: 魚を3匹釣るまで他の行動禁止)', maxLength: LIMITS.label,
