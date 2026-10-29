@@ -14,15 +14,17 @@ export function createTimerBgmController(stage) {
   let selectedUrl = '';
   let failed = false;
   let lastState = null;
+  let loadedVideoId = '';
 
   function ensureYoutube() {
     if (player || loading) return loading || Promise.resolve(player);
     loading = new Promise((resolve, reject) => {
       const ready = () => {
         try {
+          loadedVideoId = youtubeVideoId(selectedUrl);
           player = new window.YT.Player(mount, {
             width: '320', height: '200',
-            videoId: youtubeVideoId(selectedUrl),
+            videoId: loadedVideoId,
             playerVars: { playsinline: 1, controls: 1, rel: 0, origin: location.origin },
             events: {
               onReady: () => { resolve(player); sync(lastState); },
@@ -80,9 +82,12 @@ export function createTimerBgmController(stage) {
     if (ytId) {
       audio.pause();
       if (!player) { ensureYoutube(); return; }
-      if (changed) player.loadVideoById(ytId);
+      if (loadedVideoId !== ytId) {
+        loadedVideoId = ytId;
+        player.loadVideoById(ytId);
+      }
       if (current.paused) player.pauseVideo();
-      else if (!failed && player.getPlayerState() !== window.YT.PlayerState.PLAYING) player.playVideo();
+      else if (!failed && [window.YT.PlayerState.UNSTARTED, window.YT.PlayerState.PAUSED, window.YT.PlayerState.CUED].includes(player.getPlayerState())) player.playVideo();
       return;
     }
     player?.pauseVideo?.();
