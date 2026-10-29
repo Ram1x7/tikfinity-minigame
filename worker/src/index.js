@@ -375,14 +375,29 @@ export default {
       if (!/^(prod|test)\/[a-f0-9]{32}\.(mp3|m4a|ogg|wav)$/.test(key)) return reply(cors, 404, { error: 'not found' });
       const envName = key.split('/')[0];
       if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
-      const object = await env.BGM_BUCKET.get(key);
+      const rangeHeader = request.headers.get('Range');
+      const metadata = await env.BGM_BUCKET.head(key);
+      if (!metadata) return reply(cors, 404, { error: 'not found' });
+      let range;
+      if (rangeHeader) {
+        const match = /^bytes=(\\d*)-(\\d*)$/.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
+        let start = match[1] ? Number(match[1]) : Math.max(0, metadata.size - Number(match[2]));
+        let end = match[2] && match[1] ? Number(match[2]) : metadata.size - 1;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= metadata.size || end < start) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
+        end = Math.min(end, metadata.size - 1);
+        range = { offset: start, length: end - start + 1 };
+      }
+      const object = await env.BGM_BUCKET.get(key, range ? { range } : {});
       if (!object) return reply(cors, 404, { error: 'not found' });
       const headers = new Headers(cors);
       object.writeHttpMetadata(headers);
       headers.set('Accept-Ranges', 'bytes');
+      headers.set('Content-Length', String(range ? range.length : metadata.size));
+      if (range) headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
       headers.set('Cache-Control', 'public, max-age=86400');
       headers.set('X-Content-Type-Options', 'nosniff');
-      return new Response(object.body, { headers });
+      return new Response(object.body, { status: range ? 206 : 200, headers });
     }
     if (request.method !== 'POST') return reply(cors, 405, { error: 'POST のみ受け付けます' });
 
