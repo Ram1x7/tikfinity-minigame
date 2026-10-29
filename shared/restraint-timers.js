@@ -15,7 +15,7 @@ const remaining = (x) => Math.max(0, Number(x.remainingMs) || 0);
 function startNext(s) {
   if (s.entries.some((x) => active(x) && exclusive(x))) return;
   const next = s.entries.find((x) => x.status === 'waiting' && exclusive(x));
-  if (next) next.status = 'active';
+  if (next) { next.status = 'active'; next.startedAt = s.updatedAt; }
 }
 
 /** 時間経過を適用。途中で専用行動が終われば残りの経過時間を次の待機に引き継ぐ。 */
@@ -57,16 +57,19 @@ export function awardTimer(state, rule, now) {
       durationMs < 1000 || durationMs > MAX_DURATION_MS) {
     throw new Error('縛りタイマーの設定が不正です');
   }
+  const bgmUrl = typeof rule?.bgmUrl === 'string' ? rule.bgmUrl : '';
   const existing = s.entries.find((x) => x.id === id && x.status !== 'done');
   if (existing) {
     const before = remaining(existing);
     existing.remainingMs = Math.min(MAX_REMAINING_MS, before + durationMs);
     existing.totalMs = Math.min(MAX_REMAINING_MS, (Number(existing.totalMs) || before) + durationMs);
+    if (bgmUrl) existing.bgmUrl = bgmUrl;
     return s;
   }
   const hasExclusive = s.entries.some((x) => active(x) && exclusive(x));
   s.entries.push({
-    id, label, group, remainingMs: durationMs, totalMs: durationMs,
+    id, label, group, bgmUrl, remainingMs: durationMs, totalMs: durationMs,
+    startedAt: group === 'parallel' || !hasExclusive ? now : null,
     status: group === 'parallel' || !hasExclusive ? 'active' : 'waiting',
   });
   return s;
