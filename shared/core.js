@@ -195,7 +195,7 @@ function sanitizeTimer(input) {
     durationMs: Math.round(minutes * 60000),
     group: input.group === 'parallel' ? 'parallel' : 'exclusive',
     // YouTube URLs use a visible official embed player, never hidden audio extraction.
-    ...(supportedBgmUrl(bgmUrl) ? { bgmUrl } : {}),
+    ...(supportedBgmUrl(bgmUrl) ? { bgmUrl, bgmVolume: Math.max(0, Math.min(100, Math.round(Number(input.bgmVolume ?? 50) || 0))) } : {}),
   };
 }
 

@@ -321,6 +321,9 @@ function renderTables() {
         h('label', { class: 'field' }, '実行中BGMのURL（MP3など／YouTube動画）',
           h('input', { type: 'url', value: timer.bgmUrl || '', placeholder: 'https://www.youtube.com/watch?v=... または https://example.com/music.mp3',
             oninput: (e) => { it.timer = { ...it.timer, bgmUrl: e.target.value }; markDirty(); } })),
+        h('label', { class: 'field' }, 'BGM音量（0〜100%）',
+          h('input', { type: 'number', min: 0, max: 100, step: 5, value: timer.bgmVolume ?? 50,
+            oninput: (e) => { it.timer = { ...it.timer, bgmVolume: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }; markDirty(); } })),
         h('p', { class: 'hint' }, '先に再生中のBGMを優先。タイマー停止中は一時停止します。YouTubeは配信画面に公式動画プレーヤーを表示します。iPadでは自動再生できない場合があります。'));
       timerControls.hidden = !timerEnabled;
       return h('div', { class: 'cand' },

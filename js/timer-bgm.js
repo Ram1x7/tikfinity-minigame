@@ -15,6 +15,7 @@ export function createTimerBgmController(stage) {
   let failed = false;
   let lastState = null;
   let loadedVideoId = '';
+  let lastVolume = -1;
 
   function ensureYoutube() {
     if (player || loading) return loading || Promise.resolve(player);
@@ -27,7 +28,7 @@ export function createTimerBgmController(stage) {
             videoId: loadedVideoId,
             playerVars: { playsinline: 1, controls: 1, rel: 0, origin: location.origin },
             events: {
-              onReady: () => { resolve(player); sync(lastState); },
+              onReady: () => { resolve(player); lastVolume = -1; sync(lastState); },
               onStateChange: (event) => {
                 if (event.data === window.YT.PlayerState.ENDED && selectedId && !lastState?.paused) {
                   player.seekTo(0, true);
@@ -70,6 +71,12 @@ export function createTimerBgmController(stage) {
       selectedId = nextId;
       selectedUrl = nextUrl;
       failed = false;
+    }
+    const volume = Math.max(0, Math.min(100, Number(selected?.bgmVolume ?? 50)));
+    audio.volume = volume / 100;
+    if (player && lastVolume !== volume) {
+      player.setVolume(volume);
+      lastVolume = volume;
     }
     const ytId = youtubeVideoId(selectedUrl);
     container.hidden = !ytId;
