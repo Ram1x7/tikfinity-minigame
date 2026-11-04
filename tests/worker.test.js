@@ -254,3 +254,47 @@ test('SA_PRIVATE_KEY の貼り付けミスを吸収し、読めない時は分�
   const bad = await (await admin('/admin/ping')).json();
   assert.match(bad.firebase, /SA_PRIVATE_KEY/);
 });
+
+test('R2のMP3配信はSafariのRange読み込み・HEAD・全体GETに対応する', async () => {
+  const bytes = Uint8Array.from([73, 68, 51, 4, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6]);
+  const key = 'prod/0123456789abcdef0123456789abcdef.mp3';
+  const metadata = {
+    size: bytes.length,
+    writeHttpMetadata(headers) { headers.set('Content-Type', 'audio/mpeg'); },
+  };
+  env.BGM_BUCKET = {
+    async head(requestKey) { assert.equal(requestKey, key); return metadata; },
+    async get(requestKey, opts) {
+      assert.equal(requestKey, key);
+      const { offset = 0, length = bytes.length } = opts.range || {};
+      return {
+        body: new Blob([bytes.slice(offset, offset + length)]).stream(),
+        writeHttpMetadata: metadata.writeHttpMetadata,
+      };
+    },
+  };
+  const url = `https://w.example.com/bgm/${key}`;
+  const full = await worker.fetch(new Request(url), env, ctx);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('Content-Type'), 'audio/mpeg');
+  assert.equal(full.headers.get('Accept-Ranges'), 'bytes');
+  assert.deepEqual(new Uint8Array(await full.arrayBuffer()), bytes);
+
+  const partial = await worker.fetch(new Request(url, { headers: { Range: 'bytes=0-3' } }), env, ctx);
+  assert.equal(partial.status, 206);
+  assert.equal(partial.headers.get('Content-Range'), `bytes 0-3/${bytes.length}`);
+  assert.equal(partial.headers.get('Content-Length'), '4');
+  assert.deepEqual(new Uint8Array(await partial.arrayBuffer()), bytes.slice(0, 4));
+
+  const toEnd = await worker.fetch(new Request(url, { headers: { Range: 'bytes=4-' } }), env, ctx);
+  assert.equal(toEnd.status, 206);
+  assert.deepEqual(new Uint8Array(await toEnd.arrayBuffer()), bytes.slice(4));
+
+  const head = await worker.fetch(new Request(url, { method: 'HEAD' }), env, ctx);
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get('Content-Length'), String(bytes.length));
+  assert.equal(head.headers.get('Content-Type'), 'audio/mpeg');
+
+  const invalid = await worker.fetch(new Request(url, { headers: { Range: 'bytes=999-' } }), env, ctx);
+  assert.equal(invalid.status, 416);
+});

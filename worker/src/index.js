@@ -369,7 +369,7 @@ export default {
         allowedEnvs: allowedEnvs(env),
       });
     }
-    if (request.method === 'GET' && url.pathname.startsWith('/bgm/')) {
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/bgm/')) {
       if (!env.BGM_BUCKET) return reply(cors, 503, { error: 'BGM_BUCKET が未設定です' });
       const key = url.pathname.slice('/bgm/'.length);
       if (!/^(prod|test)\/[a-f0-9]{32}\.(mp3|m4a|ogg|wav)$/.test(key)) return reply(cors, 404, { error: 'not found' });
@@ -380,13 +380,22 @@ export default {
       if (!metadata) return reply(cors, 404, { error: 'not found' });
       let range;
       if (rangeHeader) {
-        const match = /^bytes=(\\d*)-(\\d*)$/.exec(rangeHeader);
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
         if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
         let start = match[1] ? Number(match[1]) : Math.max(0, metadata.size - Number(match[2]));
         let end = match[2] && match[1] ? Number(match[2]) : metadata.size - 1;
         if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= metadata.size || end < start) return new Response(null, { status: 416, headers: { ...cors, 'Content-Range': `bytes */${metadata.size}` } });
         end = Math.min(end, metadata.size - 1);
         range = { offset: start, length: end - start + 1 };
+      }
+      if (request.method === 'HEAD') {
+        const headers = new Headers(cors);
+        metadata.writeHttpMetadata(headers);
+        headers.set('Accept-Ranges', 'bytes');
+        headers.set('Content-Length', String(metadata.size));
+        headers.set('Cache-Control', 'public, max-age=86400');
+        headers.set('X-Content-Type-Options', 'nosniff');
+        return new Response(null, { status: 200, headers });
       }
       const object = await env.BGM_BUCKET.get(key, range ? { range } : {});
       if (!object) return reply(cors, 404, { error: 'not found' });
