@@ -91,7 +91,7 @@ function renderGachaTodo(pending) {
 }
 
 let restraintState = null;
-const timerBgm = createTimerBgmController(stage);
+const timerBgm = createTimerBgmController(stage, { diagnostic: params.get('bgmDebug') === '1' });
 function renderRestraintOverlay() {
   if (!restraintEl) return;
   if (!restraintState || (demo && !timerDemo) || preview) {
