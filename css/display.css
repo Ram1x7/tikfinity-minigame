@@ -544,10 +544,12 @@ body {
   font-size: 29px; white-space: nowrap;
 }
 
-/* ギフトガチャの未完了リスト：ゲーム画面左側、コメント・ランキングの上 */
+/* ギフトガチャの未完了リスト：左下寄り、コメント欄と縛りタイマーの上。
+   1080×1920のキャンバスで下端は1160px。タイマー上端1190px、
+   コメント欄の目安1400pxに重ならない。件数が変わっても下端を固定する。 */
 #gacha-todo-overlay {
   position: absolute; z-index: 18;
-  top: 480px; left: 34px; width: 520px;
+  bottom: 760px; left: 54px; width: 520px;
   box-sizing: border-box; padding: 13px 19px 16px;
   border: 3px solid #cfa75f; border-radius: 16px;
   background: rgba(9, 21, 47, .94);
