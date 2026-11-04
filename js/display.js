@@ -97,12 +97,14 @@ function renderRestraintOverlay() {
   if (!restraintState || (demo && !timerDemo) || preview) {
     timerBgm.sync(null);
     restraintEl.hidden = true;
+    stage.classList.remove('has-restraints');
     return;
   }
   const current = advanceTimers(restraintState, Date.now());
   timerBgm.sync(current);
   const entries = (current.entries || []).filter((x) => x.status === 'active' || x.status === 'waiting');
   restraintEl.hidden = entries.length === 0;
+  stage.classList.toggle('has-restraints', entries.length > 0);
   const cards = entries.slice(0, 4).map((x) => {
     const remaining = Math.max(0, Number(x.remainingMs || 0));
     const secs = Math.ceil(remaining / 1000);
