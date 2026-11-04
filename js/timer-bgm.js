@@ -2,7 +2,7 @@
 // PRISM/iPadでは自動再生がOSに拒否される場合がある。
 import { youtubeVideoId } from '../shared/core.js';
 
-export function createTimerBgmController(stage) {
+export function createTimerBgmController(stage, { diagnostic = false } = {}) {
   const audio = new Audio();
   audio.loop = true;
   audio.preload = 'none';
@@ -16,6 +16,47 @@ export function createTimerBgmController(stage) {
   let lastState = null;
   let loadedVideoId = '';
   let lastVolume = -1;
+  let lastEvent = '待機中';
+  let lastError = '';
+  // URLに &bgmDebug=1 を付けたときだけ表示する。配信時は表示しない。
+  const debugPanel = diagnostic ? document.createElement('aside') : null;
+  if (debugPanel) {
+    debugPanel.id = 'bgm-diagnostic';
+    debugPanel.setAttribute('aria-label', 'BGM再生診断');
+    stage.append(debugPanel);
+  }
+
+  function updateDiagnostic() {
+    if (!debugPanel) return;
+    const yt = youtubeVideoId(selectedUrl);
+    const active = (lastState?.entries || []).filter((x) => x.status === 'active' && x.bgmUrl && x.remainingMs > 0);
+    const entry = active.find((x) => x.id === selectedId);
+    const lines = [
+      'BGM診断（配信時はbgmDebug=1を外す）',
+      `タイマーBGM: ${selectedId ? '設定あり' : '未選択'} / 候補 ${active.length}件`,
+      `状態: ${lastState?.paused ? '一時停止' : '実行中'} / 種別: ${yt ? 'YouTube' : '音声ファイル'}`,
+      `再生: ${yt ? 'YouTubeプレーヤー' : audio.paused ? '停止中' : '再生要求中/再生中'} / 音量: ${entry?.bgmVolume ?? 50}%`,
+      `音声データ: ready=${audio.readyState} network=${audio.networkState} mediaError=${audio.error?.code || 0}`,
+      `最終イベント: ${lastEvent}`,
+      `エラー: ${lastError || 'なし'}`,
+    ];
+    debugPanel.textContent = lines.join('\n');
+  }
+
+  for (const eventName of ['playing', 'pause', 'waiting', 'stalled', 'canplay']) {
+    audio.addEventListener(eventName, () => {
+      lastEvent = eventName;
+      if (eventName === 'playing') { failed = false; lastError = ''; }
+      updateDiagnostic();
+    });
+  }
+  audio.addEventListener('error', () => {
+    failed = true;
+    lastEvent = 'error';
+    lastError = `MediaError code=${audio.error?.code ?? '不明'}`;
+    updateDiagnostic();
+  });
+
 
   function ensureYoutube() {
     if (player || loading) return loading || Promise.resolve(player);
@@ -37,6 +78,9 @@ export function createTimerBgmController(stage) {
               },
               onError: (event) => {
                 failed = true;
+                lastEvent = 'YouTube error';
+                lastError = `YouTube error ${event.data}`;
+                updateDiagnostic();
                 console.warn('YouTube動画を再生できません（埋め込み禁止や動画制限の可能性）', event.data);
               },
             },
@@ -53,7 +97,7 @@ export function createTimerBgmController(stage) {
         script.onerror = () => reject(new Error('YouTube APIを読み込めません'));
         document.head.append(script);
       }
-    }).catch((error) => { failed = true; console.warn(error); return null; });
+    }).catch((error) => { failed = true; lastEvent = 'YouTube API error'; lastError = error?.name || 'API読み込み失敗'; updateDiagnostic(); console.warn(error); return null; });
     return loading;
   }
 
@@ -71,7 +115,10 @@ export function createTimerBgmController(stage) {
       selectedId = nextId;
       selectedUrl = nextUrl;
       failed = false;
+      lastError = '';
+      lastEvent = nextId ? 'BGM選択' : '待機中';
     }
+    updateDiagnostic();
     const volume = Math.max(0, Math.min(100, Number(selected?.bgmVolume ?? 50)));
     audio.volume = volume / 100;
     if (player && lastVolume !== volume) {
@@ -102,13 +149,23 @@ export function createTimerBgmController(stage) {
     if (current.paused) audio.pause();
     else if (audio.paused && !failed) {
       const attemptedUrl = selectedUrl;
-      audio.play().catch((error) => {
+      lastEvent = 'play() 実行';
+      updateDiagnostic();
+      audio.play().then(() => {
+        if (attemptedUrl !== selectedUrl) return;
+        lastEvent = 'play() 成功';
+        updateDiagnostic();
+      }).catch((error) => {
         if (attemptedUrl !== selectedUrl) return;
         failed = true;
-        console.warn('PRISM/iPadが音声の自動再生を拒否しました', error);
+        lastEvent = 'play() 失敗';
+        lastError = error?.name || '不明な再生エラー';
+        updateDiagnostic();
+        console.warn('BGMの再生に失敗しました', error);
       });
     }
   }
-  stage.addEventListener('pointerdown', () => { failed = false; sync(lastState); });
+  stage.addEventListener('pointerdown', () => { failed = false; lastError = ''; lastEvent = '画面操作で再試行'; sync(lastState); });
+  updateDiagnostic();
   return { sync };
 }
