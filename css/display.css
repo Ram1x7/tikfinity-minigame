@@ -544,12 +544,12 @@ body {
   font-size: 29px; white-space: nowrap;
 }
 
-/* ギフトガチャの未完了リスト：左下寄り、コメント欄と縛りタイマーの上。
-   1080×1920のキャンバスで下端は1160px。タイマー上端1190px、
-   コメント欄の目安1400pxに重ならない。件数が変わっても下端を固定する。 */
+/* ギフトガチャの未完了リスト：通常は画面左下寄りへ70px下げ、
+   1080×1920のキャンバスで下端1230px（コメント欄の目安1400pxより上）。
+   縛りタイマー表示中は元の下端1160pxへ戻し、タイマー上端1190pxとの重なりを防ぐ。 */
 #gacha-todo-overlay {
   position: absolute; z-index: 18;
-  bottom: 760px; left: 54px; width: 520px;
+  bottom: 690px; left: 54px; width: 520px;
   box-sizing: border-box; padding: 13px 19px 16px;
   border: 3px solid #cfa75f; border-radius: 16px;
   background: rgba(9, 21, 47, .94);
@@ -558,6 +558,7 @@ body {
   text-shadow: 1px 2px 2px #050c20;
   pointer-events: none;
 }
+#stage.has-restraints #gacha-todo-overlay { bottom: 760px; }
 #gacha-todo-overlay[hidden] { display: none; }
 .gacha-todo-heading {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
