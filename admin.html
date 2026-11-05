@@ -72,6 +72,33 @@
 
     <section class="card">
       <div class="card__head">
+        <h2>いいね・フォロー連動</h2>
+        <button class="btn btn--small" id="add-trigger">＋ ルールを追加</button>
+      </div>
+      <p class="hint">配信全体の累計いいね数、または新規フォローでアクションを実行します。1つの条件に複数のアクションを設定できます。音声はPRISMの自動再生制限により鳴らない場合があります。</p>
+      <div id="trigger-list" class="stack"></div>
+      <div class="item">
+        <strong>この配信の集計</strong>
+        <p id="engagement-count" class="hint">取得中…</p>
+        <p class="hint">配信開始時にリセットしてください。リセットすると累計いいね・フォローの重複記録・クールタイムが初期化されます。</p>
+        <div class="btn-row">
+          <button class="btn btn--danger" id="engagement-reset">配信の集計をリセット</button>
+          <button class="btn" id="engagement-refresh">集計を更新</button>
+        </div>
+      </div>
+      <div class="item">
+        <strong>動作テスト</strong>
+        <p class="hint">テスト用のイベントを送ります。選択中の環境で累計に加算され、実際の演出キューに入ります。本番ではなくテスト環境で試すことを推奨します。</p>
+        <div class="btn-row">
+          <label class="field">疑似いいね数 <input id="engagement-test-likes" type="number" min="1" max="10000" value="100"></label>
+          <button class="btn" id="engagement-test-like">いいねをテスト</button>
+          <button class="btn" id="engagement-test-follow">フォローをテスト</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
         <h2>抽選テーブル</h2>
         <button class="btn btn--small" id="add-table">＋ テーブルを追加</button>
       </div>

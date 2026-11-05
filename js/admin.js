@@ -8,7 +8,7 @@ import { advanceTimers } from '../shared/restraint-timers.js';
 // ============================================================
 import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
 import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints, watchGachaTodo } from './store.js';
-import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo, uploadBgm } from './api.js';
+import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo, uploadBgm, readEngagement, resetEngagement, testEngagement } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
 import { initLayoutEditor, loadSavedLayout, showStreamUrl, urlValue } from './layout-editor.js';
@@ -19,7 +19,7 @@ import {
 const env = getEnv();
 const $ = (id) => document.getElementById(id);
 
-let state = { gifts: [], tables: [], settings: { ...DEFAULT_SETTINGS } };
+let state = { gifts: [], tables: [], triggers: [], settings: { ...DEFAULT_SETTINGS } };
 let dirty = false;
 
 // ---------------- 共通 ----------------
@@ -43,6 +43,9 @@ function fromStored(cfg) {
     tables: Object.entries(cfg.tables || {}).map(([id, t]) => ({
       id, title: t.title || '', items: (t.items || []).map((it) => ({ ...it, timer: it.timer ? { ...it.timer, enabled: true, minutes: it.timer.minutes ?? it.timer.durationMs / 60000 } : null })),
     })),
+    triggers: (Array.isArray(cfg.triggers) ? cfg.triggers : Object.values(cfg.triggers || {})).map((r) => ({ ...r,
+      actions: (Array.isArray(r.actions) ? r.actions : Object.values(r.actions || {})).map((a) => ({ ...a,
+        ...(a.type === 'timer' ? { minutes: a.minutes ?? Number(a.durationMs || 600000) / 60000 } : {}) })) })),
     settings: { ...DEFAULT_SETTINGS, ...(cfg.settings || {}) },
   };
 }
@@ -50,6 +53,7 @@ function fromStored(cfg) {
 function toPayload() {
   return {
     gifts: state.gifts,
+    triggers: state.triggers,
     tables: Object.fromEntries(state.tables.map((t) => [t.id, { title: t.title, items: t.items }])),
     settings: state.settings,
   };
@@ -292,6 +296,135 @@ function addGift(name = '') {
 }
 $('add-gift').addEventListener('click', () => addGift());
 
+// ---------------- いいね・フォロー連動 ----------------
+const actionTypes = [
+  ['message', '画面にメッセージ表示'],
+  ['sound', '効果音を再生'],
+  ['gacha', 'ガチャを回す'],
+  ['roulette', 'ルーレットを回す'],
+  ['todo', 'やることリストに追加'],
+  ['timer', '縛りタイマーを開始'],
+];
+function defaultAction(type = 'message') {
+  if (type === 'message') return { type, text: 'ありがとう！' };
+  if (type === 'sound') return { type, url: '', volume: 50 };
+  if (type === 'gacha' || type === 'roulette') return { type, tableId: state.tables[0]?.id || '', title: '' };
+  if (type === 'todo') return { type, label: '石を5個集める' };
+  return { type: 'timer', id: 'event_' + Date.now().toString(36), label: '縛り', minutes: 5, group: 'parallel' };
+}
+function renderTriggers() {
+  const list = $('trigger-list');
+  const tableOptions = state.tables.map((t) => [t.id, t.title || t.id]);
+  if (!tableOptions.length) tableOptions.push(['', '先に抽選テーブルを追加']);
+  list.replaceChildren(...state.triggers.map((rule, index) => {
+    const actionNodes = (rule.actions || []).map((a, ai) => {
+      const controls = [];
+      if (a.type === 'message') controls.push(h('label', { class: 'field' }, '表示する文章',
+        h('input', { type: 'text', maxLength: 120, value: a.text || '', placeholder: '例: いいねありがとう！',
+          oninput: (e) => { a.text = e.target.value; markDirty(); } })));
+      if (a.type === 'sound') controls.push(
+        h('label', { class: 'field' }, '音声URL（MP3など）',
+          h('input', { type: 'url', value: a.url || '', placeholder: 'https://.../sound.mp3',
+            oninput: (e) => { a.url = e.target.value; markDirty(); } })),
+        h('label', { class: 'field' }, '効果音ファイルをアップロード（10MB以下）',
+          h('input', { type: 'file', accept: '.mp3,.m4a,.ogg,.wav,audio/*', onchange: async (e) => {
+            const input = e.target;
+            const file = input.files?.[0];
+            if (!file) return;
+            input.disabled = true;
+            try { a.url = await uploadBgm(env, file); markDirty(); renderTriggers();
+              toast('アップロードしました。最後に「保存」を押してください'); }
+            catch (err) { input.disabled = false; toast(err.message, true); }
+          } })),
+        h('label', { class: 'field' }, '音量（0〜100%）',
+          h('input', { type: 'number', min: 0, max: 100, value: a.volume ?? 50,
+            oninput: (e) => { a.volume = Number(e.target.value); markDirty(); } })));
+      if (a.type === 'gacha' || a.type === 'roulette') controls.push(
+        h('label', { class: 'field' }, '抽選テーブル', select(tableOptions, a.tableId || '', (v) => { a.tableId = v; markDirty(); })),
+        h('label', { class: 'field' }, '画面タイトル（任意）',
+          h('input', { type: 'text', maxLength: 60, value: a.title || '', placeholder: '空ならテーブル名',
+            oninput: (e) => { a.title = e.target.value; markDirty(); } })));
+      if (a.type === 'todo') controls.push(h('label', { class: 'field' }, '追加するミッション',
+        h('input', { type: 'text', maxLength: 80, value: a.label || '',
+          oninput: (e) => { a.label = e.target.value; markDirty(); } })));
+      if (a.type === 'timer') controls.push(
+        h('label', { class: 'field' }, '縛りID（同じIDなら時間加算）',
+          h('input', { type: 'text', maxLength: 100, value: a.id || '',
+            oninput: (e) => { a.id = e.target.value; markDirty(); } })),
+        h('label', { class: 'field' }, '縛り名',
+          h('input', { type: 'text', maxLength: 80, value: a.label || '',
+            oninput: (e) => { a.label = e.target.value; markDirty(); } })),
+        h('label', { class: 'field' }, '時間（分）',
+          h('input', { type: 'number', min: 1, max: 1440, value: a.minutes ?? 5,
+            oninput: (e) => { a.minutes = Number(e.target.value); markDirty(); } })),
+        h('label', { class: 'field' }, '同時実行',
+          select([['exclusive', '専用行動'], ['parallel', '並行可能']], a.group || 'parallel',
+            (v) => { a.group = v; markDirty(); })));
+      return h('div', { class: 'item' },
+        h('div', { class: 'item__row' },
+          h('strong', {}, 'アクション ' + (ai + 1)),
+          select(actionTypes, a.type, (v) => { rule.actions[ai] = defaultAction(v); markDirty(); renderTriggers(); }),
+          h('button', { class: 'btn btn--small btn--danger', onclick: () => {
+            rule.actions.splice(ai, 1); markDirty(); renderTriggers();
+          } }, '削除')),
+        h('div', { class: 'grid2' }, ...controls));
+    });
+    return h('div', { class: `item${rule.enabled === false ? ' is-disabled' : ''}` },
+      h('div', { class: 'item__row' },
+        h('strong', {}, 'ルール ' + (index + 1)),
+        h('label', { class: 'toggle' },
+          h('input', { type: 'checkbox', checked: rule.enabled !== false, onchange: (e) => {
+            rule.enabled = e.target.checked; markDirty(); renderTriggers();
+          } }), '有効'),
+        h('button', { class: 'btn btn--small btn--danger', onclick: () => {
+          if (!confirm('この連動ルールを削除しますか？')) return;
+          state.triggers.splice(index, 1); markDirty(); renderTriggers();
+        } }, '削除')),
+      h('div', { class: 'grid2' },
+        h('label', { class: 'field' }, '発動条件',
+          select([['like', 'いいね（配信全体の累計）'], ['follow', '新規フォロー']], rule.type || 'like',
+            (v) => { rule.type = v; markDirty(); renderTriggers(); })),
+        h('label', { class: 'field', hidden: rule.type === 'follow' }, '何いいねごとに発動',
+          h('input', { type: 'number', min: 1, max: 100000, value: rule.threshold ?? 100,
+            oninput: (e) => { rule.threshold = Number(e.target.value); markDirty(); } })),
+        h('label', { class: 'field' }, 'クールタイム（秒）',
+          h('input', { type: 'number', min: 0, max: 3600, value: rule.cooldownSec ?? 0,
+            oninput: (e) => { rule.cooldownSec = Number(e.target.value); markDirty(); } }))),
+      ...actionNodes,
+      h('button', { class: 'btn btn--small', disabled: rule.actions.length >= LIMITS.actionsPerTrigger,
+        onclick: () => { rule.actions.push(defaultAction()); markDirty(); renderTriggers(); } }, '＋ アクションを追加'));
+  }));
+  if (!state.triggers.length) list.append(h('p', { class: 'hint' }, 'ルールはまだありません。追加するまでいいね・フォローによる動作は発生しません。'));
+}
+$('add-trigger').addEventListener('click', () => {
+  if (state.triggers.length >= LIMITS.triggers) { toast('ルールの上限です', true); return; }
+  state.triggers.push({ id: 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    enabled: true, type: 'like', threshold: 100, cooldownSec: 0, actions: [defaultAction()] });
+  markDirty(); renderTriggers();
+});
+async function refreshEngagement() {
+  try {
+    const r = await readEngagement(env);
+    $('engagement-count').textContent = `累計いいね ${r.likesTotal || 0} 回｜新規フォロー ${r.followsTotal || 0} 件`;
+  } catch (err) { $('engagement-count').textContent = '取得失敗：' + err.message; }
+}
+$('engagement-refresh').addEventListener('click', refreshEngagement);
+$('engagement-reset').addEventListener('click', async () => {
+  if (!confirm('この配信の累計いいね・フォロー記録をリセットします。元に戻せません。よろしいですか？')) return;
+  try { await resetEngagement(env); await refreshEngagement(); toast('集計をリセットしました'); }
+  catch (err) { toast(err.message, true); }
+});
+async function simulateEngagement(type) {
+  try {
+    const r = await testEngagement(env, { type, likeCount: Math.max(1, Math.min(10000, Number($('engagement-test-likes').value) || 100)),
+      nickname: 'テスト視聴者' });
+    toast(r.status === 'queued' ? '連動アクションを再生待ちに追加しました' : '受信しました（発動条件には未達）');
+    await refreshEngagement();
+  } catch (err) { toast(err.message, true); }
+}
+$('engagement-test-like').addEventListener('click', () => simulateEngagement('like'));
+$('engagement-test-follow').addEventListener('click', () => simulateEngagement('follow'));
+
 // ---------------- 抽選テーブル ----------------
 function updateProbabilities(table, cells) {
   probabilities(table.items).forEach((p, i) => {
@@ -407,6 +540,7 @@ $('set-dedupe').addEventListener('input', (e) => { state.settings.dedupeWindowSe
 function renderAll() {
   renderTables();
   renderGifts();
+  renderTriggers();
   renderSettings();
 }
 
@@ -486,6 +620,7 @@ async function start() {
   renderConnection();
   renderUrls();
   renderAll();
+  refreshEngagement();
 
   if (!isConfigured()) {
     toast('js/config.js に Firebase の接続情報を設定してください', true);

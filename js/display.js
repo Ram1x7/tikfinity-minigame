@@ -405,7 +405,7 @@ function showSender(name) {
   }
 }
 
-async function playItem(item, key) {
+async function playItem(item, key, actionIndex = null) {
   const rolls = Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {});
   const pool = Array.isArray(item.pool) ? item.pool : Object.values(item.pool || {});
   if (rolls.length === 0) return;
@@ -456,7 +456,8 @@ async function playItem(item, key) {
     } else await playGacha(playEl, rolls[i], { speed });
     if (mode === 'roulette' && rolls[i].timer && key && !preview && !demo) {
       // 失敗した場合は再生位置を進めない。再試行時もWorker側のイベントIDで二重加算を防ぐ。
-      await awardRestraint(key, i);
+      if (actionIndex === null) await awardRestraint(key, i);
+      else await awardEngagementAction(key, actionIndex, 'roll-timer');
     }
     addChip(rolls[i], { inCard: eventEl.classList.contains('event--card') });
     await sleep(RESULT_HOLD_MS);
@@ -466,6 +467,63 @@ async function playItem(item, key) {
   countBase = rolls.length > 1 ? `結果 ${rolls.length} 件` : '';
   renderCount();
   await sleep(TAIL_MS + Math.max(0, rolls.length - 1) * 400);
+}
+
+// いいね・フォロー連動アクションはギフトのキューと同じ順番で再生する。
+const engagementNotice = document.getElementById('engagement-notice');
+const activeEffectSounds = new Set();
+function showEngagementNotice(message) {
+  engagementNotice.textContent = message;
+  engagementNotice.hidden = false;
+}
+function hideEngagementNotice() { engagementNotice.hidden = true; }
+
+async function awardEngagementAction(key, index, kind) {
+  if (!player || !player.active || !player.canPlay()) throw new Error('再生担当の接続が切れています');
+  const p = playerParams(params);
+  const response = await fetch(p.workerUrl + '/display/event-action?env=' + env, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dk: p.displayKey, key, index, kind }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || '連動アクションの登録に失敗しました');
+}
+
+async function playEngagementEvent(item, key) {
+  eventEl.classList.remove('show');
+  const actions = Array.isArray(item.actions) ? item.actions : Object.values(item.actions || {});
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    if (a.type === 'gacha' || a.type === 'roulette') {
+      hideEngagementNotice();
+      await playItem({ ...a, mode: a.type, giftName: item.giftName, sender: item.sender,
+        repeatCount: 1 }, key, i);
+      if (a.type === 'gacha' && !preview && !demo) await awardEngagementAction(key, i, 'roll-todo');
+      eventEl.classList.remove('show');
+    } else if (a.type === 'message') {
+      showEngagementNotice(a.text.replace(/\\n/g, '\n'));
+      await sleep(3500);
+      hideEngagementNotice();
+    } else if (a.type === 'sound') {
+      // iPad / PRISM の音声自動再生制限がある場合は画面にも失敗を通知する。
+      const audio = new Audio(a.url);
+      audio.volume = Math.max(0, Math.min(1, (Number(a.volume) || 0) / 100));
+      activeEffectSounds.add(audio);
+      const cleanup = () => activeEffectSounds.delete(audio);
+      audio.addEventListener('ended', cleanup, { once: true });
+      audio.addEventListener('error', cleanup, { once: true });
+      try { await audio.play(); }
+      catch (error) { cleanup(); console.error('効果音の再生がブロックされました', error);
+        showEngagementNotice('効果音を再生できませんでした'); await sleep(1500); hideEngagementNotice(); }
+      await sleep(500);
+    } else if (a.type === 'todo' || a.type === 'timer') {
+      if (!preview && !demo) await awardEngagementAction(key, i, a.type);
+      showEngagementNotice(a.type === 'todo' ? 'ミッション追加：' + a.label : '縛り開始：' + a.label);
+      await sleep(1600);
+      hideEngagementNotice();
+    }
+  }
+  hideEngagementNotice();
 }
 
 function isStale(item) {
@@ -488,11 +546,14 @@ async function drain() {
     const { key, item } = queue.shift();
     updatePending();
     try {
-      if (!isStale(item)) await playItem(item, key);
+      if (!isStale(item)) {
+        if (item.mode === 'event') await playEngagementEvent(item, key);
+        else await playItem(item, key);
+      }
     } catch (err) {
       console.error('再生に失敗しました', err);
       // タイマー付き結果を取りこぼさないよう、失敗した抽選は再試行する。
-      if (item?.mode === 'roulette' && (Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {})).some((r) => r.timer)) {
+      if ((item?.mode === 'roulette' && (Array.isArray(item.rolls) ? item.rolls : Object.values(item.rolls || {})).some((r) => r.timer)) || item?.mode === 'event') {
         queue.unshift({ key, item });
         updatePending();
         await sleep(5000);
@@ -504,6 +565,7 @@ async function drain() {
   }
   } finally {
     eventEl.classList.remove('show');
+    hideEngagementNotice();
     stage.classList.remove('is-playing');
     playing = false;
   }

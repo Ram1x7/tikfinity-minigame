@@ -39,6 +39,8 @@ import {
   dedupeRule,
   isDuplicate,
   DEFAULT_SETTINGS,
+  engagementHits,
+  buildEngagementActions,
 } from '../../shared/core.js';
 import { createDb } from './firebase.js';
 import { reply, safeEqual, allowedEnvs, envAllowed, ENV_DENIED } from './http.js';
@@ -51,7 +53,7 @@ const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const WORKER_VERSION = '1.4.0';
+export const WORKER_VERSION = '1.5.0';
 
 const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
@@ -134,6 +136,7 @@ async function loadConfig(db, envName) {
   const config = (await db.get(`envs/${envName}/config`)) || {};
   return {
     gifts: config.gifts || {},
+    triggers: Array.isArray(config.triggers) ? config.triggers : Object.values(config.triggers || {}),
     tables: normalizeTables(config.tables || {}),
     settings: { ...DEFAULT_SETTINGS, ...(config.settings || {}) },
   };
@@ -216,6 +219,104 @@ export async function processGift(db, envName, fields, source, nowMs = Date.now(
   return result;
 }
 
+
+const engagementPath = (envName) => `envs/${envName}/state/engagement`;
+const eventField = (fields, keys) => {
+  for (const key of keys) if (fields[key] !== undefined && fields[key] !== null && String(fields[key]).trim()) return String(fields[key]).trim();
+  return '';
+};
+async function engagementHash(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].slice(0, 16).map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+// Firebase push ID と同じ時刻順のキーを生成し、同じキューキーへのPUTで再送を冪等にする。
+const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+function engagementQueueKey(now) {
+  let time = Math.max(0, Math.floor(now));
+  let prefix = '';
+  for (let i = 0; i < 8; i++) { prefix = PUSH_CHARS[time % 64] + prefix; time = Math.floor(time / 64); }
+  const random = crypto.getRandomValues(new Uint8Array(12));
+  return '-' + prefix + [...random].map((v) => PUSH_CHARS[v % 64]).join('');
+}
+async function flushEngagementPending(db, envName, pending) {
+  for (const [key, item] of Object.entries(pending || {})) {
+    if (!/^-[A-Za-z0-9_-]{8,40}$/.test(key)) continue;
+    await db.put(`envs/${envName}/queue/${key}`, item);
+    // 他の通知と同時に更新されても未配送イベントを消さないようETagで削除。
+    const path = engagementPath(envName);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { value, etag } = await db.getWithEtag(path);
+      if (!value?.pending?.[key]) break;
+      const nextPending = { ...value.pending };
+      delete nextPending[key];
+      if (await db.putIfMatch(path, { ...value, pending: nextPending }, etag)) break;
+      if (attempt === 7) throw new Error('連動イベントの配送記録を更新できませんでした');
+    }
+  }
+}
+
+/** TikFinity の likeCount は通知1回分の追加数として累計に加算する。
+ * 配信開始時は管理画面でリセット。msgId のある通知とフォロー済みIDを重複除外。
+ */
+export async function processEngagement(db, envName, type, fields, source = 'webhook', now = Date.now()) {
+  if (!['like', 'follow'].includes(type)) return { status: 'skipped', reason: 'unsupported event' };
+  const config = await loadConfig(db, envName);
+  const sender = eventField(fields, ['nickname', 'nickName', 'displayName', 'username', 'userName', 'uniqueId']).slice(0, 40) || '視聴者';
+  const user = eventField(fields, ['userId', 'userID', 'user_id', 'uniqueId', 'unique_id', 'username']);
+  const msgId = eventField(fields, ['msgId', 'msg_id', 'eventId', 'event_id', 'messageId']);
+  if (type === 'follow' && !user && !msgId) return { status: 'skipped', reason: 'フォローのユーザーIDまたはイベントIDがありません' };
+  const rawCount = eventField(fields, ['likeCount', 'like_count', 'likes', 'count']);
+  const count = type === 'like' ? Math.max(1, Math.min(10000, Math.floor(Number(rawCount) || 1))) : 0;
+  const userHash = type === 'follow' && user ? await engagementHash('follow:' + user) : '';
+  const eventHash = msgId ? await engagementHash(type + ':' + msgId) : '';
+  const path = engagementPath(envName);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { value, etag } = await db.getWithEtag(path);
+    const old = value && typeof value === 'object' ? value : {};
+    const dedupe = { ...(old.dedupe || {}) };
+    const followSeen = { ...(old.followSeen || {}) };
+    if ((eventHash && dedupe[eventHash]) || (userHash && followSeen[userHash])) {
+      await flushEngagementPending(db, envName, old.pending);
+      return { status: 'duplicate', likesTotal: Number(old.likesTotal) || 0 };
+    }
+    const before = Number(old.likesTotal) || 0;
+    const after = before + count;
+    const lastFiredAt = { ...(old.lastFiredAt || {}) };
+    const actions = [];
+    for (const rule of config.triggers) {
+      const hits = engagementHits(rule, type, before, after, lastFiredAt[rule.id], now);
+      if (!hits) continue;
+      for (let n = 0; n < hits; n++) actions.push(...buildEngagementActions(rule, config, sender));
+      if (hits > 0) lastFiredAt[rule.id] = now;
+    }
+    if (eventHash) dedupe[eventHash] = now;
+    // 1配信ぶんの重複除外。古いイベントIDは一定数で切り詰める。
+    const dedupeKeys = Object.keys(dedupe);
+    for (const key of dedupeKeys.slice(0, Math.max(0, dedupeKeys.length - 600))) delete dedupe[key];
+    if (userHash) followSeen[userHash] = true;
+    const pending = { ...(old.pending || {}) };
+    if (actions.length) {
+      const key = engagementQueueKey(now);
+      pending[key] = { mode: 'event', giftName: type === 'like' ? 'いいね' : 'フォロー', sender,
+        repeatCount: type === 'like' ? count : 1, title: type === 'like' ? `累計 ${after} いいね` : '新規フォロー',
+        actions: actions.slice(0, 30), source, receivedAt: { '.sv': 'timestamp' } };
+    }
+    const next = {
+      pending,
+      likesTotal: type === 'like' ? after : before,
+      followsTotal: (Number(old.followsTotal) || 0) + (type === 'follow' ? 1 : 0),
+      followSeen, dedupe, lastFiredAt, updatedAt: now,
+    };
+    if (!await db.putIfMatch(path, next, etag)) continue;
+    await flushEngagementPending(db, envName, pending);
+    return { status: actions.length ? 'queued' : 'counted', likesTotal: next.likesTotal,
+      followsTotal: next.followsTotal, actions: actions.length };
+  }
+  throw new Error('いいね・フォローの同時更新が混み合っています');
+}
+
 /** 古いデータを消して容量を一定に保つ */
 async function cleanup(db, envName, nowMs) {
   const trim = async (path, keep) => {
@@ -272,6 +373,31 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
   if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+
+  if (path === '/admin/engagement') {
+    const body = await request.json().catch(() => ({}));
+    const path = engagementPath(envName);
+    if (body.type === 'read') {
+      const state = await db.get(path) || {};
+      return reply(cors, 200, { ok: true, likesTotal: Number(state.likesTotal) || 0, followsTotal: Number(state.followsTotal) || 0 });
+    }
+    if (body.type === 'reset') {
+      await db.remove(path);
+      return reply(cors, 200, { ok: true, likesTotal: 0, followsTotal: 0 });
+    }
+    return reply(cors, 400, { error: '不正な操作です' });
+  }
+
+  if (path === '/admin/test-engagement') {
+    const body = await request.json().catch(() => ({}));
+    const type = String(body.type || '');
+    if (!['like', 'follow'].includes(type)) return reply(cors, 400, { error: 'like または follow を指定してください' });
+    const fields = { ...body, msgId: 'test_' + crypto.randomUUID().replace(/-/g, ''),
+      userId: type === 'follow' ? 'test_' + crypto.randomUUID().replace(/-/g, '') : String(body.userId || 'test') };
+    const result = await processEngagement(db, envName, type, fields, 'test');
+    ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
+    return reply(cors, 200, result);
+  }
 
   if (path === '/admin/gacha-todo') {
     const body = await request.json().catch(() => ({}));
@@ -422,6 +548,44 @@ export default {
         if(!displayKey||!safeEqual(String(body.dk||''),String(displayKey)))return reply(cors,401,{error:'display key invalid'});
         return reply(cors,200,await getActivity(db,envName));
       }
+      if (url.pathname === '/display/event-action') {
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'env が不正です' });
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+        const body = await request.json().catch(() => ({}));
+        const keyName = envName === 'prod' ? 'DISPLAY_KEY_PROD' : 'DISPLAY_KEY_TEST';
+        if (!env[keyName] || !safeEqual(body.dk, env[keyName])) return reply(cors, 401, { error: '表示用の合言葉が違います' });
+        const key = String(body.key || '');
+        const index = Number(body.index);
+        const rollIndex = Number(body.rollIndex || 0);
+        if (!/^-[A-Za-z0-9_-]{8,40}$/.test(key) || !Number.isInteger(index) || index < 0 || index >= 30 || rollIndex !== 0) {
+          return reply(cors, 400, { error: 'イベントの指定が不正です' });
+        }
+        const queued = await db.get(`envs/${envName}/queue/${key}`);
+        const actions = queued && (Array.isArray(queued.actions) ? queued.actions : Object.values(queued.actions || {}));
+        const action = queued?.mode === 'event' && actions?.[index];
+        if (!action) return reply(cors, 404, { error: 'イベントが見つかりません' });
+        if ((body.kind === 'todo' && action.type === 'todo') ||
+            (body.kind === 'roll-todo' && action.type === 'gacha' && action.rolls?.[0]?.label)) {
+          const id = `${key}_${String(index).padStart(3, '0')}`;
+          const path = `envs/${envName}/state/gachaTodo/pending/${id}`;
+          if (!(await db.get(path))) await db.put(path, { label: String(body.kind === 'roll-todo' ? action.rolls[0].label : action.label).slice(0, 80),
+            sender: String(queued.sender || '視聴者').slice(0, 40), giftName: String(queued.giftName || '').slice(0, 80),
+            createdAt: { '.sv': 'timestamp' } });
+          return reply(cors, 200, { ok: true });
+        }
+        if (body.kind === 'timer' && action.type === 'timer') {
+          const result = await updateRestraints(db, envName, { type: 'award', eventId: `${key}:${100 + index}`,
+            rule: { id: action.id, label: action.label, durationMs: action.durationMs, group: action.group } });
+          return reply(cors, 200, { ok: true, ...result });
+        }
+        if (body.kind === 'roll-timer' && action.type === 'roulette' && action.rolls?.[0]?.timer) {
+          const result = await updateRestraints(db, envName, { type: 'award', eventId: `${key}:${200 + index}`,
+            rule: action.rolls[0].timer });
+          return reply(cors, 200, { ok: true, ...result });
+        }
+        return reply(cors, 400, { error: 'アクションが一致しません' });
+      }
       if (url.pathname === '/overlay/webhook') {
         if(!safeEqual(url.searchParams.get('k'),env.WEBHOOK_KEY))return reply(cors,401,{error:'webhook key invalid'});
         const envName=url.searchParams.get('env');
@@ -430,8 +594,11 @@ export default {
         const fields=await readFields(request,url);
         // URL-defined event category takes precedence over untrusted payload category.
         const type=String(url.searchParams.get('type')||'').toLowerCase();
-        const result=await saveActivity(db,envName,fields,type);
-        return reply(cors,200,result);
+        // 視聴履歴の保存に失敗しても、連動アクションの受信は止めない。
+        const activity=await saveActivity(db,envName,fields,type).catch((error)=>({status:'error',reason:String(error.message||error)}));
+        const result=['like','follow'].includes(type) ? await processEngagement(db,envName,type,fields) : {status:'skipped'};
+        if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
+        return reply(cors,200,{activity,engagement:result});
       }
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
@@ -444,6 +611,12 @@ export default {
         }
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
+        const eventType = String(url.searchParams.get('type') || '').toLowerCase();
+        if (eventType === 'like' || eventType === 'follow') {
+          const result = await processEngagement(db, envName, eventType, fields);
+          if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
+          return reply(cors, 200, result);
+        }
         const result = await processGift(db, envName, fields, 'webhook');
         if(result.status!=='duplicate') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
