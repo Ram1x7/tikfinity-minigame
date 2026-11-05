@@ -7,7 +7,7 @@ import { advanceTimers } from '../shared/restraint-timers.js';
 // 編集中の内容は「保存」を押すまでこの画面の中だけに保持する。
 // ============================================================
 import { getEnv, envLabel, SELECTABLE_ENVS, IS_PREVIEW_SITE, urlWithEnv } from './env.js';
-import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints, watchGachaTodo } from './store.js';
+import { isConfigured, loadConfig, watchRecentLog, watchConnection, watchDisplayState, watchRestraints, watchGachaTodo } from './store.js?v=20261105-rules-reload';
 import { getConnection, saveConnection, saveConfig, copyConfig, diagnose, releasePlayer, controlRestraints, controlGachaTodo, uploadBgm, readEngagement, resetEngagement, testEngagement } from './api.js';
 import { h, toast, copyText, formatTime } from './dom.js';
 import { SAMPLE_CONFIG } from './sample-config.js';
