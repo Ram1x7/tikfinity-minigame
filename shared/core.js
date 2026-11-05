@@ -19,6 +19,8 @@ export const LIMITS = {
   giftName: 80,
   sender: 40,
   maxRolls: 50,
+  triggers: 20,
+  actionsPerTrigger: 6,
   repeatCount: 9999,
 };
 
@@ -247,13 +249,50 @@ export function sanitizeConfig(input) {
     };
   }
 
+  // いいね・フォロー連動ルール。旧設定に triggers が無くても従来のギフト動作を維持する。
+  const triggers = (Array.isArray(src.triggers) ? src.triggers : Object.values(src.triggers || {}))
+    .slice(0, LIMITS.triggers).map((raw, index) => {
+      const id = str(raw?.id, 40);
+      const type = raw?.type === 'follow' ? 'follow' : 'like';
+      const actions = (Array.isArray(raw?.actions) ? raw.actions : Object.values(raw?.actions || {}))
+        .slice(0, LIMITS.actionsPerTrigger).map((a) => {
+          const kind = str(a?.type, 20);
+          if (kind === 'gacha' || kind === 'roulette') {
+            const tableId = str(a?.tableId, 40);
+            if (!tables[tableId]) { errors.push(`連動ルール${index + 1}: 抽選テーブル「${tableId}」が存在しません`); return null; }
+            return { type: kind, tableId, title: str(a?.title, LIMITS.title) };
+          }
+          if (kind === 'message') return { type: kind, text: str(a?.text, 120) };
+          if (kind === 'sound') {
+            const url = str(a?.url, 600);
+            if (!/^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(url)) {
+              errors.push(`連動ルール${index + 1}: 効果音にはHTTPSの音声ファイルURLを指定してください`); return null;
+            }
+            return { type: kind, url, volume: clampInt(a?.volume, 0, 100, 50) };
+          }
+          if (kind === 'todo') return { type: kind, label: str(a?.label, LIMITS.label) };
+          if (kind === 'timer') {
+            const timerId = str(a?.id, 100);
+            const minutes = Number(a?.minutes);
+            if (!/^[a-zA-Z0-9_-]{1,100}$/.test(timerId) || !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) {
+              errors.push(`連動ルール${index + 1}: 縛りIDと時間を確認してください`); return null;
+            }
+            return { type: kind, id: timerId, label: str(a?.label, LIMITS.label) || '縛り', durationMs: Math.round(minutes * 60000), group: a?.group === 'parallel' ? 'parallel' : 'exclusive' };
+          }
+          return null;
+        }).filter((a) => a && (a.type !== 'message' || a.text) && (a.type !== 'todo' || a.label));
+      if (!/^[a-zA-Z0-9_-]{1,40}$/.test(id)) { errors.push(`連動ルール${index + 1}: ルールIDが不正です`); return null; }
+      return { id, type, enabled: raw?.enabled !== false, threshold: clampInt(raw?.threshold, 1, 100000, 100),
+        cooldownSec: clampInt(raw?.cooldownSec, 0, 3600, 0), actions };
+    }).filter(Boolean);
+
   const s = src.settings && typeof src.settings === 'object' ? src.settings : {};
   const settings = {
     staleMinutes: clampInt(s.staleMinutes, 0, 1440, DEFAULT_SETTINGS.staleMinutes),
     dedupeWindowSec: clampInt(s.dedupeWindowSec, 0, 60, DEFAULT_SETTINGS.dedupeWindowSec),
   };
 
-  return { config: { gifts, tables, settings }, errors };
+  return { config: { gifts, tables, triggers, settings }, errors };
 }
 
 /**
@@ -325,4 +364,34 @@ export function isDuplicate(existingTs, nowMs, windowMs) {
   if (typeof existingTs !== 'number') return false;
   if (windowMs === null) return true;
   return nowMs - existingTs < windowMs;
+}
+
+// いいねの「追加数」を配信累計に足したとき、しきい値を跨いだ回数を返す。
+// 1通知で極端な回数が届いても演出キューを増やしすぎない（最大5回）。
+export function engagementHits(rule, eventType, before, after, lastAt, now) {
+  if (rule.enabled === false || rule.type !== eventType) return 0;
+  if (Number(rule.cooldownSec) > 0 && now - Number(lastAt || 0) < rule.cooldownSec * 1000) return 0;
+  if (eventType === 'follow') return 1;
+  const n = Math.max(1, Number(rule.threshold) || 100);
+  return Math.min(5, Math.max(0, Math.floor(after / n) - Math.floor(before / n)));
+}
+
+// 連動イベントに含める抽選結果を Worker 側で確定する。
+export function buildEngagementActions(rule, config, sender, rand = secureRandom) {
+  const out = [];
+  for (const action of rule.actions || []) {
+    if (action.type === 'gacha' || action.type === 'roulette') {
+      const table = config.tables?.[action.tableId];
+      const items = activeItems(table);
+      const picked = weightedPick(items, rand);
+      if (!picked) continue;
+      out.push({
+        type: action.type, title: action.title || table.title || '', sender,
+        rolls: [{ label: picked.label, rarity: picked.rarity || 'N', color: picked.color || '',
+          ...(picked.timer ? { timer: { ...picked.timer, label: picked.label } } : {}) }],
+        pool: items.map((it) => ({ label: it.label, weight: Number(it.weight), rarity: it.rarity || 'N', color: it.color || '' })),
+      });
+    } else if (['message', 'sound', 'todo', 'timer'].includes(action.type)) out.push({ ...action });
+  }
+  return out;
 }
