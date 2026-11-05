@@ -536,10 +536,11 @@ export default {
         const actions = queued && (Array.isArray(queued.actions) ? queued.actions : Object.values(queued.actions || {}));
         const action = queued?.mode === 'event' && actions?.[index];
         if (!action) return reply(cors, 404, { error: 'イベントが見つかりません' });
-        if (body.kind === 'todo' && action.type === 'todo') {
+        if ((body.kind === 'todo' && action.type === 'todo') ||
+            (body.kind === 'roll-todo' && action.type === 'gacha' && action.rolls?.[0]?.label)) {
           const id = `${key}_${String(index).padStart(3, '0')}`;
           const path = `envs/${envName}/state/gachaTodo/pending/${id}`;
-          if (!(await db.get(path))) await db.put(path, { label: String(action.label).slice(0, 80),
+          if (!(await db.get(path))) await db.put(path, { label: String(body.kind === 'roll-todo' ? action.rolls[0].label : action.label).slice(0, 80),
             sender: String(queued.sender || '視聴者').slice(0, 40), giftName: String(queued.giftName || '').slice(0, 80),
             createdAt: { '.sv': 'timestamp' } });
           return reply(cors, 200, { ok: true });
@@ -564,7 +565,8 @@ export default {
         const fields=await readFields(request,url);
         // URL-defined event category takes precedence over untrusted payload category.
         const type=String(url.searchParams.get('type')||'').toLowerCase();
-        const activity=await saveActivity(db,envName,fields,type);
+        // 視聴履歴の保存に失敗しても、連動アクションの受信は止めない。
+        const activity=await saveActivity(db,envName,fields,type).catch((error)=>({status:'error',reason:String(error.message||error)}));
         const result=['like','follow'].includes(type) ? await processEngagement(db,envName,type,fields) : {status:'skipped'};
         if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
         return reply(cors,200,{activity,engagement:result});
