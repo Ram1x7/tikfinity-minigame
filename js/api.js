@@ -88,6 +88,9 @@ export async function uploadBgm(env, file) {
   return data.url;
 }
 
+export const readEngagement = (env) => call(`/admin/engagement?env=${env}`, { type: 'read' });
+export const resetEngagement = (env) => call(`/admin/engagement?env=${env}`, { type: 'reset' });
+export const testEngagement = (env, body) => call(`/admin/test-engagement?env=${env}`, body);
 export const controlGachaTodo = (env, body) => call(`/admin/gacha-todo?env=${env}`, body);
 export const readRestraints = (env) => call(`/admin/restraints?env=${env}`, { type: 'read' });
 export const controlRestraints = (env, body) => call(`/admin/restraints?env=${env}`, body);
