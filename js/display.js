@@ -498,6 +498,7 @@ async function playEngagementEvent(item, key) {
       hideEngagementNotice();
       await playItem({ ...a, mode: a.type, giftName: item.giftName, sender: item.sender,
         repeatCount: 1 }, key, i);
+      if (a.type === 'gacha' && !preview && !demo) await awardEngagementAction(key, i, 'roll-todo');
       eventEl.classList.remove('show');
     } else if (a.type === 'message') {
       showEngagementNotice(a.text.replace(/\\n/g, '\n'));
