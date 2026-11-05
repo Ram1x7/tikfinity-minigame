@@ -603,3 +603,32 @@ body {
   white-space: pre-wrap; overflow-wrap: anywhere;
   pointer-events: none;
 }
+
+/* いいね・フォロー連動の一時通知。コメント欄の手前に収める。 */
+#engagement-notice {
+  position: absolute;
+  z-index: 32;
+  top: 570px;
+  left: 130px;
+  width: 820px;
+  box-sizing: border-box;
+  padding: 26px 38px;
+  border: 3px solid rgba(178, 220, 255, .92);
+  border-radius: 24px;
+  background: rgba(37, 23, 73, .94);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .4);
+  color: #fff;
+  font-family: 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: 46px;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  animation: engagement-pop .3s ease-out;
+}
+#engagement-notice[hidden] { display: none !important; }
+@keyframes engagement-pop {
+  from { opacity: 0; transform: translateY(20px) scale(.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
