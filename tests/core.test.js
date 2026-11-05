@@ -160,7 +160,7 @@ test('Webhook: いいね累計・重複通知・フォローの二重発動を�
     get: async (path) => path.endsWith('/config') ? config : null,
     getWithEtag: async () => ({ value: engagement, etag: 'etag' }),
     putIfMatch: async (_path, next) => { engagement = next; return true; },
-    post: async (_path, item) => { queued.push(item); return { name: '-test12345678' }; },
+    put: async (path, item) => { if (path.includes('/queue/')) queued.push(item); return null; },
   };
   assert.equal((await processEngagement(db, 'test', 'like', { likeCount: 99, msgId: 'l1' })).status, 'counted');
   assert.equal((await processEngagement(db, 'test', 'like', { likeCount: 1, msgId: 'l2' })).status, 'queued');
