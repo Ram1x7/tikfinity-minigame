@@ -1251,6 +1251,32 @@ async function engagementHash(value) {
   return [...new Uint8Array(digest)].slice(0, 16).map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+// Firebase push ID と同じ時刻順のキーを生成し、同じキューキーへのPUTで再送を冪等にする。
+const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+function engagementQueueKey(now) {
+  let time = Math.max(0, Math.floor(now));
+  let prefix = '';
+  for (let i = 0; i < 8; i++) { prefix = PUSH_CHARS[time % 64] + prefix; time = Math.floor(time / 64); }
+  const random = crypto.getRandomValues(new Uint8Array(12));
+  return '-' + prefix + [...random].map((v) => PUSH_CHARS[v % 64]).join('');
+}
+async function flushEngagementPending(db, envName, pending) {
+  for (const [key, item] of Object.entries(pending || {})) {
+    if (!/^-[A-Za-z0-9_-]{8,40}$/.test(key)) continue;
+    await db.put(`envs/${envName}/queue/${key}`, item);
+    // 他の通知と同時に更新されても未配送イベントを消さないようETagで削除。
+    const path = engagementPath(envName);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { value, etag } = await db.getWithEtag(path);
+      if (!value?.pending?.[key]) break;
+      const nextPending = { ...value.pending };
+      delete nextPending[key];
+      if (await db.putIfMatch(path, { ...value, pending: nextPending }, etag)) break;
+      if (attempt === 7) throw new Error('連動イベントの配送記録を更新できませんでした');
+    }
+  }
+}
+
 /** TikFinity の likeCount は通知1回分の追加数として累計に加算する。
  * 配信開始時は管理画面でリセット。msgId のある通知とフォロー済みIDを重複除外。
  */
@@ -1272,6 +1298,7 @@ async function processEngagement(db, envName, type, fields, source = 'webhook', 
     const dedupe = { ...(old.dedupe || {}) };
     const followSeen = { ...(old.followSeen || {}) };
     if ((eventHash && dedupe[eventHash]) || (userHash && followSeen[userHash])) {
+      await flushEngagementPending(db, envName, old.pending);
       return { status: 'duplicate', likesTotal: Number(old.likesTotal) || 0 };
     }
     const before = Number(old.likesTotal) || 0;
@@ -1289,19 +1316,21 @@ async function processEngagement(db, envName, type, fields, source = 'webhook', 
     const dedupeKeys = Object.keys(dedupe);
     for (const key of dedupeKeys.slice(0, Math.max(0, dedupeKeys.length - 600))) delete dedupe[key];
     if (userHash) followSeen[userHash] = true;
+    const pending = { ...(old.pending || {}) };
+    if (actions.length) {
+      const key = engagementQueueKey(now);
+      pending[key] = { mode: 'event', giftName: type === 'like' ? 'いいね' : 'フォロー', sender,
+        repeatCount: type === 'like' ? count : 1, title: type === 'like' ? `累計 ${after} いいね` : '新規フォロー',
+        actions: actions.slice(0, 30), source, receivedAt: { '.sv': 'timestamp' } };
+    }
     const next = {
+      pending,
       likesTotal: type === 'like' ? after : before,
       followsTotal: (Number(old.followsTotal) || 0) + (type === 'follow' ? 1 : 0),
       followSeen, dedupe, lastFiredAt, updatedAt: now,
     };
     if (!await db.putIfMatch(path, next, etag)) continue;
-    if (actions.length) {
-      // 同じイベントのアクションは1キューにまとめ、再生順を維持する。
-      const item = { mode: 'event', giftName: type === 'like' ? 'いいね' : 'フォロー', sender,
-        repeatCount: type === 'like' ? count : 1, title: type === 'like' ? `累計 ${after} いいね` : '新規フォロー',
-        actions: actions.slice(0, 30), source, receivedAt: { '.sv': 'timestamp' } };
-      await db.post(`envs/${envName}/queue`, item);
-    }
+    await flushEngagementPending(db, envName, pending);
     return { status: actions.length ? 'queued' : 'counted', likesTotal: next.likesTotal,
       followsTotal: next.followsTotal, actions: actions.length };
   }
@@ -1556,10 +1585,11 @@ export default {
         const actions = queued && (Array.isArray(queued.actions) ? queued.actions : Object.values(queued.actions || {}));
         const action = queued?.mode === 'event' && actions?.[index];
         if (!action) return reply(cors, 404, { error: 'イベントが見つかりません' });
-        if (body.kind === 'todo' && action.type === 'todo') {
+        if ((body.kind === 'todo' && action.type === 'todo') ||
+            (body.kind === 'roll-todo' && action.type === 'gacha' && action.rolls?.[0]?.label)) {
           const id = `${key}_${String(index).padStart(3, '0')}`;
           const path = `envs/${envName}/state/gachaTodo/pending/${id}`;
-          if (!(await db.get(path))) await db.put(path, { label: String(action.label).slice(0, 80),
+          if (!(await db.get(path))) await db.put(path, { label: String(body.kind === 'roll-todo' ? action.rolls[0].label : action.label).slice(0, 80),
             sender: String(queued.sender || '視聴者').slice(0, 40), giftName: String(queued.giftName || '').slice(0, 80),
             createdAt: { '.sv': 'timestamp' } });
           return reply(cors, 200, { ok: true });
@@ -1584,7 +1614,8 @@ export default {
         const fields=await readFields(request,url);
         // URL-defined event category takes precedence over untrusted payload category.
         const type=String(url.searchParams.get('type')||'').toLowerCase();
-        const activity=await saveActivity(db,envName,fields,type);
+        // 視聴履歴の保存に失敗しても、連動アクションの受信は止めない。
+        const activity=await saveActivity(db,envName,fields,type).catch((error)=>({status:'error',reason:String(error.message||error)}));
         const result=['like','follow'].includes(type) ? await processEngagement(db,envName,type,fields) : {status:'skipped'};
         if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
         return reply(cors,200,{activity,engagement:result});
