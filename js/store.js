@@ -28,16 +28,9 @@ function database() {
 
 const envRef = (env, path) => ref(database(), `envs/${env}/${path}`);
 
-/** Firebase は配列を {0:..} で返すことがあるので、テーブルの候補を配列に揃える */
-export function normalizeConfig(raw) {
-  const config = raw || {};
-  const tables = {};
-  for (const [id, t] of Object.entries(config.tables || {})) {
-    const items = Array.isArray(t.items) ? t.items : Object.values(t.items || {});
-    tables[id] = { ...t, items: items.filter(Boolean) };
-  }
-  return { gifts: config.gifts || {}, tables, settings: config.settings || {} };
-}
+// Firebase設定の正規化は共有モジュールに分離し、連動ルールも保持する。
+export { normalizeConfig } from '../shared/config-normalize.js';
+import { normalizeConfig } from '../shared/config-normalize.js';
 
 export async function loadConfig(env) {
   const snap = await get(envRef(env, 'config'));
