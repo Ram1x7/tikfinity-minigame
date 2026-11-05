@@ -23,6 +23,8 @@ const LIMITS = {
   giftName: 80,
   sender: 40,
   maxRolls: 50,
+  triggers: 20,
+  actionsPerTrigger: 6,
   repeatCount: 9999,
 };
 
@@ -251,13 +253,50 @@ function sanitizeConfig(input) {
     };
   }
 
+  // いいね・フォロー連動ルール。旧設定に triggers が無くても従来のギフト動作を維持する。
+  const triggers = (Array.isArray(src.triggers) ? src.triggers : Object.values(src.triggers || {}))
+    .slice(0, LIMITS.triggers).map((raw, index) => {
+      const id = str(raw?.id, 40);
+      const type = raw?.type === 'follow' ? 'follow' : 'like';
+      const actions = (Array.isArray(raw?.actions) ? raw.actions : Object.values(raw?.actions || {}))
+        .slice(0, LIMITS.actionsPerTrigger).map((a) => {
+          const kind = str(a?.type, 20);
+          if (kind === 'gacha' || kind === 'roulette') {
+            const tableId = str(a?.tableId, 40);
+            if (!tables[tableId]) { errors.push(`連動ルール${index + 1}: 抽選テーブル「${tableId}」が存在しません`); return null; }
+            return { type: kind, tableId, title: str(a?.title, LIMITS.title) };
+          }
+          if (kind === 'message') return { type: kind, text: str(a?.text, 120) };
+          if (kind === 'sound') {
+            const url = str(a?.url, 600);
+            if (!/^https:\/\/[^\s]+\.(?:mp3|m4a|ogg|wav)(?:\?[^\s]*)?$/i.test(url)) {
+              errors.push(`連動ルール${index + 1}: 効果音にはHTTPSの音声ファイルURLを指定してください`); return null;
+            }
+            return { type: kind, url, volume: clampInt(a?.volume, 0, 100, 50) };
+          }
+          if (kind === 'todo') return { type: kind, label: str(a?.label, LIMITS.label) };
+          if (kind === 'timer') {
+            const timerId = str(a?.id, 100);
+            const minutes = Number(a?.minutes);
+            if (!/^[a-zA-Z0-9_-]{1,100}$/.test(timerId) || !Number.isFinite(minutes) || minutes < 1 / 60 || minutes > 1440) {
+              errors.push(`連動ルール${index + 1}: 縛りIDと時間を確認してください`); return null;
+            }
+            return { type: kind, id: timerId, label: str(a?.label, LIMITS.label) || '縛り', durationMs: Math.round(minutes * 60000), group: a?.group === 'parallel' ? 'parallel' : 'exclusive' };
+          }
+          return null;
+        }).filter((a) => a && (a.type !== 'message' || a.text) && (a.type !== 'todo' || a.label));
+      if (!/^[a-zA-Z0-9_-]{1,40}$/.test(id)) { errors.push(`連動ルール${index + 1}: ルールIDが不正です`); return null; }
+      return { id, type, enabled: raw?.enabled !== false, threshold: clampInt(raw?.threshold, 1, 100000, 100),
+        cooldownSec: clampInt(raw?.cooldownSec, 0, 3600, 0), actions };
+    }).filter(Boolean);
+
   const s = src.settings && typeof src.settings === 'object' ? src.settings : {};
   const settings = {
     staleMinutes: clampInt(s.staleMinutes, 0, 1440, DEFAULT_SETTINGS.staleMinutes),
     dedupeWindowSec: clampInt(s.dedupeWindowSec, 0, 60, DEFAULT_SETTINGS.dedupeWindowSec),
   };
 
-  return { config: { gifts, tables, settings }, errors };
+  return { config: { gifts, tables, triggers, settings }, errors };
 }
 
 /**
@@ -329,6 +368,36 @@ function isDuplicate(existingTs, nowMs, windowMs) {
   if (typeof existingTs !== 'number') return false;
   if (windowMs === null) return true;
   return nowMs - existingTs < windowMs;
+}
+
+// いいねの「追加数」を配信累計に足したとき、しきい値を跨いだ回数を返す。
+// 1通知で極端な回数が届いても演出キューを増やしすぎない（最大5回）。
+function engagementHits(rule, eventType, before, after, lastAt, now) {
+  if (rule.enabled === false || rule.type !== eventType) return 0;
+  if (Number(rule.cooldownSec) > 0 && now - Number(lastAt || 0) < rule.cooldownSec * 1000) return 0;
+  if (eventType === 'follow') return 1;
+  const n = Math.max(1, Number(rule.threshold) || 100);
+  return Math.min(5, Math.max(0, Math.floor(after / n) - Math.floor(before / n)));
+}
+
+// 連動イベントに含める抽選結果を Worker 側で確定する。
+function buildEngagementActions(rule, config, sender, rand = secureRandom) {
+  const out = [];
+  for (const action of rule.actions || []) {
+    if (action.type === 'gacha' || action.type === 'roulette') {
+      const table = config.tables?.[action.tableId];
+      const items = activeItems(table);
+      const picked = weightedPick(items, rand);
+      if (!picked) continue;
+      out.push({
+        type: action.type, title: action.title || table.title || '', sender,
+        rolls: [{ label: picked.label, rarity: picked.rarity || 'N', color: picked.color || '',
+          ...(picked.timer ? { timer: { ...picked.timer, label: picked.label } } : {}) }],
+        pool: items.map((it) => ({ label: it.label, weight: Number(it.weight), rarity: it.rarity || 'N', color: it.color || '' })),
+      });
+    } else if (['message', 'sound', 'todo', 'timer'].includes(action.type)) out.push({ ...action });
+  }
+  return out;
 }
 
 // ---- shared/restraint-timers.js ----
@@ -1004,7 +1073,7 @@ const QUEUE_KEEP = 300;   // キューに残す件数
 const LOG_KEEP = 100;     // 受信ログに残す件数
 const DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
 
-const WORKER_VERSION = '1.4.0';
+const WORKER_VERSION = '1.5.0';
 
 const SECRET_NAMES = ['FIREBASE_DB_URL', 'SA_CLIENT_EMAIL', 'SA_PRIVATE_KEY', 'WEBHOOK_KEY', 'ADMIN_KEY', 'DISPLAY_KEY_PROD', 'DISPLAY_KEY_TEST'];
 
@@ -1087,6 +1156,7 @@ async function loadConfig(db, envName) {
   const config = (await db.get(`envs/${envName}/config`)) || {};
   return {
     gifts: config.gifts || {},
+    triggers: Array.isArray(config.triggers) ? config.triggers : Object.values(config.triggers || {}),
     tables: normalizeTables(config.tables || {}),
     settings: { ...DEFAULT_SETTINGS, ...(config.settings || {}) },
   };
@@ -1169,6 +1239,75 @@ async function processGift(db, envName, fields, source, nowMs = Date.now()) {
   return result;
 }
 
+
+const engagementPath = (envName) => `envs/${envName}/state/engagement`;
+const eventField = (fields, keys) => {
+  for (const key of keys) if (fields[key] !== undefined && fields[key] !== null && String(fields[key]).trim()) return String(fields[key]).trim();
+  return '';
+};
+async function engagementHash(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].slice(0, 16).map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+/** TikFinity の likeCount は通知1回分の追加数として累計に加算する。
+ * 配信開始時は管理画面でリセット。msgId のある通知とフォロー済みIDを重複除外。
+ */
+async function processEngagement(db, envName, type, fields, source = 'webhook', now = Date.now()) {
+  if (!['like', 'follow'].includes(type)) return { status: 'skipped', reason: 'unsupported event' };
+  const config = await loadConfig(db, envName);
+  const sender = eventField(fields, ['nickname', 'nickName', 'displayName', 'username', 'userName', 'uniqueId']).slice(0, 40) || '視聴者';
+  const user = eventField(fields, ['userId', 'userID', 'user_id', 'uniqueId', 'unique_id', 'username']);
+  const msgId = eventField(fields, ['msgId', 'msg_id', 'eventId', 'event_id', 'messageId']);
+  if (type === 'follow' && !user && !msgId) return { status: 'skipped', reason: 'フォローのユーザーIDまたはイベントIDがありません' };
+  const rawCount = eventField(fields, ['likeCount', 'like_count', 'likes', 'count']);
+  const count = type === 'like' ? Math.max(1, Math.min(10000, Math.floor(Number(rawCount) || 1))) : 0;
+  const userHash = type === 'follow' && user ? await engagementHash('follow:' + user) : '';
+  const eventHash = msgId ? await engagementHash(type + ':' + msgId) : '';
+  const path = engagementPath(envName);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { value, etag } = await db.getWithEtag(path);
+    const old = value && typeof value === 'object' ? value : {};
+    const dedupe = { ...(old.dedupe || {}) };
+    const followSeen = { ...(old.followSeen || {}) };
+    if ((eventHash && dedupe[eventHash]) || (userHash && followSeen[userHash])) {
+      return { status: 'duplicate', likesTotal: Number(old.likesTotal) || 0 };
+    }
+    const before = Number(old.likesTotal) || 0;
+    const after = before + count;
+    const lastFiredAt = { ...(old.lastFiredAt || {}) };
+    const actions = [];
+    for (const rule of config.triggers) {
+      const hits = engagementHits(rule, type, before, after, lastFiredAt[rule.id], now);
+      if (!hits) continue;
+      for (let n = 0; n < hits; n++) actions.push(...buildEngagementActions(rule, config, sender));
+      if (hits > 0) lastFiredAt[rule.id] = now;
+    }
+    if (eventHash) dedupe[eventHash] = now;
+    // 1配信ぶんの重複除外。古いイベントIDは一定数で切り詰める。
+    const dedupeKeys = Object.keys(dedupe);
+    for (const key of dedupeKeys.slice(0, Math.max(0, dedupeKeys.length - 600))) delete dedupe[key];
+    if (userHash) followSeen[userHash] = true;
+    const next = {
+      likesTotal: type === 'like' ? after : before,
+      followsTotal: (Number(old.followsTotal) || 0) + (type === 'follow' ? 1 : 0),
+      followSeen, dedupe, lastFiredAt, updatedAt: now,
+    };
+    if (!await db.putIfMatch(path, next, etag)) continue;
+    if (actions.length) {
+      // 同じイベントのアクションは1キューにまとめ、再生順を維持する。
+      const item = { mode: 'event', giftName: type === 'like' ? 'いいね' : 'フォロー', sender,
+        repeatCount: type === 'like' ? count : 1, title: type === 'like' ? `累計 ${after} いいね` : '新規フォロー',
+        actions: actions.slice(0, 30), source, receivedAt: { '.sv': 'timestamp' } };
+      await db.post(`envs/${envName}/queue`, item);
+    }
+    return { status: actions.length ? 'queued' : 'counted', likesTotal: next.likesTotal,
+      followsTotal: next.followsTotal, actions: actions.length };
+  }
+  throw new Error('いいね・フォローの同時更新が混み合っています');
+}
+
 /** 古いデータを消して容量を一定に保つ */
 async function cleanup(db, envName, nowMs) {
   const trim = async (path, keep) => {
@@ -1225,6 +1364,31 @@ async function handleAdmin(request, env, db, url, ctx, cors) {
   const envName = url.searchParams.get('env');
   if (!isEnv(envName)) return reply(cors, 400, { error: 'env は prod か test を指定してください' });
   if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+
+  if (path === '/admin/engagement') {
+    const body = await request.json().catch(() => ({}));
+    const path = engagementPath(envName);
+    if (body.type === 'read') {
+      const state = await db.get(path) || {};
+      return reply(cors, 200, { ok: true, likesTotal: Number(state.likesTotal) || 0, followsTotal: Number(state.followsTotal) || 0 });
+    }
+    if (body.type === 'reset') {
+      await db.remove(path);
+      return reply(cors, 200, { ok: true, likesTotal: 0, followsTotal: 0 });
+    }
+    return reply(cors, 400, { error: '不正な操作です' });
+  }
+
+  if (path === '/admin/test-engagement') {
+    const body = await request.json().catch(() => ({}));
+    const type = String(body.type || '');
+    if (!['like', 'follow'].includes(type)) return reply(cors, 400, { error: 'like または follow を指定してください' });
+    const fields = { ...body, msgId: 'test_' + crypto.randomUUID().replace(/-/g, ''),
+      userId: type === 'follow' ? 'test_' + crypto.randomUUID().replace(/-/g, '') : String(body.userId || 'test') };
+    const result = await processEngagement(db, envName, type, fields, 'test');
+    ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
+    return reply(cors, 200, result);
+  }
 
   if (path === '/admin/gacha-todo') {
     const body = await request.json().catch(() => ({}));
@@ -1375,6 +1539,43 @@ export default {
         if(!displayKey||!safeEqual(String(body.dk||''),String(displayKey)))return reply(cors,401,{error:'display key invalid'});
         return reply(cors,200,await getActivity(db,envName));
       }
+      if (url.pathname === '/display/event-action') {
+        const envName = url.searchParams.get('env');
+        if (!isEnv(envName)) return reply(cors, 400, { error: 'env が不正です' });
+        if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
+        const body = await request.json().catch(() => ({}));
+        const keyName = envName === 'prod' ? 'DISPLAY_KEY_PROD' : 'DISPLAY_KEY_TEST';
+        if (!env[keyName] || !safeEqual(body.dk, env[keyName])) return reply(cors, 401, { error: '表示用の合言葉が違います' });
+        const key = String(body.key || '');
+        const index = Number(body.index);
+        const rollIndex = Number(body.rollIndex || 0);
+        if (!/^-[A-Za-z0-9_-]{8,40}$/.test(key) || !Number.isInteger(index) || index < 0 || index >= 30 || rollIndex !== 0) {
+          return reply(cors, 400, { error: 'イベントの指定が不正です' });
+        }
+        const queued = await db.get(`envs/${envName}/queue/${key}`);
+        const actions = queued && (Array.isArray(queued.actions) ? queued.actions : Object.values(queued.actions || {}));
+        const action = queued?.mode === 'event' && actions?.[index];
+        if (!action) return reply(cors, 404, { error: 'イベントが見つかりません' });
+        if (body.kind === 'todo' && action.type === 'todo') {
+          const id = `${key}_${String(index).padStart(3, '0')}`;
+          const path = `envs/${envName}/state/gachaTodo/pending/${id}`;
+          if (!(await db.get(path))) await db.put(path, { label: String(action.label).slice(0, 80),
+            sender: String(queued.sender || '視聴者').slice(0, 40), giftName: String(queued.giftName || '').slice(0, 80),
+            createdAt: { '.sv': 'timestamp' } });
+          return reply(cors, 200, { ok: true });
+        }
+        if (body.kind === 'timer' && action.type === 'timer') {
+          const result = await updateRestraints(db, envName, { type: 'award', eventId: `${key}:${100 + index}`,
+            rule: { id: action.id, label: action.label, durationMs: action.durationMs, group: action.group } });
+          return reply(cors, 200, { ok: true, ...result });
+        }
+        if (body.kind === 'roll-timer' && action.type === 'roulette' && action.rolls?.[0]?.timer) {
+          const result = await updateRestraints(db, envName, { type: 'award', eventId: `${key}:${200 + index}`,
+            rule: action.rolls[0].timer });
+          return reply(cors, 200, { ok: true, ...result });
+        }
+        return reply(cors, 400, { error: 'アクションが一致しません' });
+      }
       if (url.pathname === '/overlay/webhook') {
         if(!safeEqual(url.searchParams.get('k'),env.WEBHOOK_KEY))return reply(cors,401,{error:'webhook key invalid'});
         const envName=url.searchParams.get('env');
@@ -1383,8 +1584,10 @@ export default {
         const fields=await readFields(request,url);
         // URL-defined event category takes precedence over untrusted payload category.
         const type=String(url.searchParams.get('type')||'').toLowerCase();
-        const result=await saveActivity(db,envName,fields,type);
-        return reply(cors,200,result);
+        const activity=await saveActivity(db,envName,fields,type);
+        const result=['like','follow'].includes(type) ? await processEngagement(db,envName,type,fields) : {status:'skipped'};
+        if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
+        return reply(cors,200,{activity,engagement:result});
       }
       if (url.pathname === '/webhook') {
         if (!safeEqual(url.searchParams.get('k'), env.WEBHOOK_KEY)) {
@@ -1397,6 +1600,12 @@ export default {
         }
         if (!envAllowed(env, envName)) return reply(cors, 403, { error: ENV_DENIED });
         const fields = await readFields(request, url);
+        const eventType = String(url.searchParams.get('type') || '').toLowerCase();
+        if (eventType === 'like' || eventType === 'follow') {
+          const result = await processEngagement(db, envName, eventType, fields);
+          if (result.status === 'queued') ctx.waitUntil(cleanup(db,envName,Date.now()).catch(()=>{}));
+          return reply(cors, 200, result);
+        }
         const result = await processGift(db, envName, fields, 'webhook');
         if(result.status!=='duplicate') ctx.waitUntil(saveActivity(db,envName,fields,'gift').catch(()=>{}));
         ctx.waitUntil(cleanup(db, envName, Date.now()).catch(() => {}));
