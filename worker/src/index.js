@@ -238,7 +238,7 @@ function engagementQueueKey(now) {
   let prefix = '';
   for (let i = 0; i < 8; i++) { prefix = PUSH_CHARS[time % 64] + prefix; time = Math.floor(time / 64); }
   const random = crypto.getRandomValues(new Uint8Array(12));
-  return '-' + prefix + [...random].map((v) => PUSH_CHARS[v % 64]).join('');
+  return prefix + [...random].map((v) => PUSH_CHARS[v % 64]).join('');
 }
 async function flushEngagementPending(db, envName, pending) {
   for (const [key, item] of Object.entries(pending || {})) {

@@ -156,11 +156,18 @@ test('Webhook: いいね累計・重複通知・フォローの二重発動を�
   });
   let engagement = null;
   const queued = [];
+  const queuedKeys = [];
   const db = {
     get: async (path) => path.endsWith('/config') ? config : null,
     getWithEtag: async () => ({ value: engagement, etag: 'etag' }),
     putIfMatch: async (_path, next) => { engagement = next; return true; },
-    put: async (path, item) => { if (path.includes('/queue/')) queued.push(item); return null; },
+    put: async (path, item) => {
+      if (path.includes('/queue/')) {
+        queued.push(item);
+        queuedKeys.push(path.split('/').at(-1));
+      }
+      return null;
+    },
   };
   assert.equal((await processEngagement(db, 'test', 'like', { likeCount: 99, msgId: 'l1' })).status, 'counted');
   assert.equal((await processEngagement(db, 'test', 'like', { likeCount: 1, msgId: 'l2' })).status, 'queued');
@@ -170,5 +177,9 @@ test('Webhook: いいね累計・重複通知・フォローの二重発動を�
   assert.equal((await processEngagement(db, 'test', 'follow', { userId: 'alice', msgId: 'f1' })).status, 'queued');
   assert.equal((await processEngagement(db, 'test', 'follow', { userId: 'alice', msgId: 'f2' })).status, 'duplicate');
   assert.equal(queued.length, 2);
+  for (const key of queuedKeys) {
+    assert.equal(key.length, 20, 'Firebase push ID と同じ20文字のキーで登録する');
+    assert.match(key, /^-[0-9A-Za-z_-]{19}$/);
+  }
   assert.equal(engagement.followsTotal, 1);
 });
